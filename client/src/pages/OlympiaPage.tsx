@@ -64,11 +64,11 @@ const SPEEDS: Discipline[] = [
 ];
 
 const COUPLINGS: CouplingMode[] = [
-  { id: "worstelen", name: "Worstelen", icon: Anchor, color: "hsl(0, 0%, 55%)", grip: "Maximaal", mechanism: "Grip — wederzijds begrip. Beide partijen houden elkaar vast.", plainExplanation: "Je pakt elkaar beet. Je voelt elkaars kracht. Er is direct contact en begrip.", effect: "Hoge frictie, maar ook hoge overdracht. Wat de een duwt, voelt de ander direct.", bestFor: "Organisaties die dicht bij elkaar staan en bereid zijn om kracht te delen.", worstFor: "Organisaties die elkaars taal niet spreken. Zonder grip wordt dit een gevecht." },
-  { id: "turks-worstelen", name: "Turks Worstelen", icon: Wind, color: "hsl(35, 50%, 55%)", grip: "Geen (olie)", mechanism: "Geen grip — alles glijdt. Kracht is nutteloos, alleen balans werkt.", plainExplanation: "Je probeert de ander vast te pakken, maar alles is glad. Niets houdt.", effect: "Bijna geen overdracht mogelijk. Energie verdwijnt. Frustratie groeit.", bestFor: "Situaties waar je eerst de context moet stabiliseren voordat koppeling kan.", worstFor: "Wanneer je denkt dat harder duwen helpt. Dat maakt het alleen gladder." },
-  { id: "aikido", name: "Aikido", icon: Circle, color: "hsl(180, 50%, 65%)", grip: "Hefboom", mechanism: "Eén heeft de ander nodig als hefboom. Je gebruikt de kracht van de ander.", plainExplanation: "In plaats van tegen te duwen, buig je de kracht van de ander om. De ander is je hefboom.", effect: "Lage eigen energie nodig, hoge effectiviteit. Maar vereist vaardigheid en timing.", bestFor: "Wanneer het kleine wiel het grote wiel wil laten draaien — met slimheid, niet met kracht.", worstFor: "Wanneer beide partijen tegelijk willen sturen. Dan ontstaat chaos." },
-  { id: "yoga", name: "Yoga", icon: Box, color: "hsl(300, 30%, 60%)", grip: "Intern", mechanism: "Geen externe koppeling — interne uitlijning versterkt het eigen wiel.", plainExplanation: "Je koppelt niet aan de ander. Je maakt jezelf eerst sterker, zodat je later beter kunt koppelen.", effect: "Geen directe overdracht. Wel: grotere toekomstige draagkracht.", bestFor: "Na een periode van overbelasting. Eerst herstellen, dan pas weer koppelen.", worstFor: "Als onmiddellijke actie nodig is. Yoga is geen antwoord op een brand." },
-  { id: "capoeira", name: "Capoeira", icon: Zap, color: "hsl(50, 90%, 55%)", grip: "Vloeiend", mechanism: "Dans tussen conflict en spel. De koppeling wisselt continu van aard.", plainExplanation: "Half gevecht, half dans. Je weet niet altijd of jullie samenwerken of concurreren — en dat is precies het punt.", effect: "Hoge energie, hoge creativiteit, maar onvoorspelbaar. Kan omslaan.", bestFor: "Innovatie, brainstorms, creatieve spanning tussen teams.", worstFor: "Wanneer er duidelijkheid en stabiliteit nodig is. Capoeira is chaos met stijl." },
+  { id: "worstelen", name: "Worstelen", icon: Anchor, color: "hsl(0, 0%, 55%)", grip: "Maximaal", mechanism: "Grip — wederzijds begrip. Beide partijen houden elkaar vast. Westerse koppeling: directe kracht, directe overdracht.", plainExplanation: "Je pakt elkaar beet. Je voelt elkaars kracht. Dit is de Westerse reflex — grip zoeken, vasthouden, sturen.", effect: "Hoge frictie, maar ook hoge overdracht. Wat de een duwt, voelt de ander direct.", bestFor: "Organisaties die dicht bij elkaar staan en bereid zijn om kracht te delen.", worstFor: "Wanneer grip geweld wordt: het grote wiel trekt het kleine kapot. Dit is Silent Violence — onzichtbare schade door krachtverschil." },
+  { id: "turks-worstelen", name: "Turks Worstelen", icon: Wind, color: "hsl(35, 50%, 55%)", grip: "Geen (olie)", mechanism: "Geen grip — alles glijdt. De context is glad. Kracht werkt niet, Westerse noch Oosterse aanpak heeft houvast.", plainExplanation: "Je probeert de ander vast te pakken, maar alles is glad. Niets houdt. De grensvlak tussen West en Oost — waar geen enkele methode werkt.", effect: "Bijna geen overdracht mogelijk. Energie verdwijnt. Frustratie groeit.", bestFor: "Herkenning: soms is de context het probleem, niet de partijen. Eerst de olie verwijderen.", worstFor: "Wanneer je denkt dat harder duwen of slimmer ombuigen helpt. Beiden falen hier." },
+  { id: "aikido", name: "Aikido", icon: Circle, color: "hsl(180, 50%, 65%)", grip: "Hefboom", mechanism: "Eén heeft de ander nodig als hefboom. Oosterse koppeling: je gebruikt de kracht van de ander, niet je eigen.", plainExplanation: "In plaats van tegen te duwen, buig je de kracht van de ander om. Dit is de Oosterse reflex — meebewegen, ombuigen, laten stromen.", effect: "Lage eigen energie nodig, hoge effectiviteit. Maar vereist vaardigheid en kalmte.", bestFor: "Wanneer het kleine wiel het grote wiel wil laten draaien — met wijsheid, niet met kracht.", worstFor: "Wanneer beide partijen tegelijk willen ombuigen. Dan is er geen kracht om te gebruiken." },
+  { id: "yoga", name: "Yoga", icon: Box, color: "hsl(300, 30%, 60%)", grip: "Intern", mechanism: "Geen externe koppeling. Interne uitlijning. Het wiel repareert zichzelf voordat het opnieuw koppelt.", plainExplanation: "Stilstaan is geen zwakte. Het is de voorwaarde voor elke volgende beweging. Zonder dit stap je kapot een volgende koppeling in.", effect: "Geen directe overdracht. Wel: grotere toekomstige draagkracht. Anti-Silent-Violence.", bestFor: "Na een periode van overbelasting of schade. Eerst helen, dan pas weer verbinden.", worstFor: "Als onmiddellijke actie nodig is. Yoga is geen antwoord op een brand." },
+  { id: "capoeira", name: "Capoeira", icon: Zap, color: "hsl(50, 90%, 55%)", grip: "Vloeiend", mechanism: "Dans tussen conflict en spel. West en Oost tegelijk. De koppeling wisselt van aard — grip wordt hefboom wordt dans.", plainExplanation: "Half gevecht, half dans. Het is serieus én speels. De grens tussen West en Oost vervaagt — en dat is precies de kracht.", effect: "Hoge energie, hoge creativiteit, maar onvoorspelbaar. Kan omslaan van spel naar geweld.", bestFor: "Innovatie, creatieve spanning, situaties waar het antwoord nog niet bestaat.", worstFor: "Wanneer stabiliteit nodig is. Capoeira is gecontroleerde chaos — zonder controle wordt het destructief." },
 ];
 
 const generateData = (discipline: Discipline) => {
@@ -215,7 +215,7 @@ function CouplingView() {
             Koppeling (Hoe verbonden?)
           </label>
           <select data-testid="select-coupling" value={couplingId} onChange={e => setCouplingId(e.target.value)} className="w-full bg-card border border-border rounded-md p-2.5 text-sm">
-            {COUPLINGS.map(c => (<option key={c.id} value={c.id}>{c.name} — {c.grip}</option>))}
+            {COUPLINGS.map((c, i) => (<option key={c.id} value={c.id}>{i === 0 ? '⟵ ' : i === COUPLINGS.length - 1 ? '⟶ ' : ''}{c.name} — {c.grip}{i === 0 ? ' (West)' : i === 2 ? ' (Oost)' : i === 4 ? ' (West↔Oost)' : ''}</option>))}
           </select>
         </div>
         <div>
@@ -476,10 +476,25 @@ export default function OlympiaPage() {
           OLYMPIA Decathlon
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          <strong className="text-foreground">5 Snelheden</strong> bepalen hoe hard elk vliegwiel draait.  
-          <strong className="text-foreground"> 5 Koppelingen</strong> bepalen hoe de wielen aan elkaar vastzitten.  
-          Samen vormen ze de mechanica van organisatorische beweging.
+          Een ontologisch model voor organisatorische beweging. 
+          <strong className="text-foreground"> 5 Snelheden</strong> (hoe hard draait elk vliegwiel) en 
+          <strong className="text-foreground"> 5 Koppelingen</strong> (hoe haken ze in elkaar — van Westerse grip tot Oosterse hefboom). 
+          Wanneer de koppeling niet klopt, ontstaat <em className="text-red-400">Silent Violence</em>: onzichtbare schade die niemand benoemt maar iedereen voelt.
         </p>
+      </div>
+
+      {/* West ↔ Oost Spectrum */}
+      <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground px-1">
+        <span className="text-foreground font-bold">WEST</span>
+        <span>Kracht · Grip · Directe Overdracht</span>
+        <div className="flex-1 h-px bg-gradient-to-r from-muted-foreground/40 via-muted-foreground/10 to-muted-foreground/40" />
+        <span>Ombuiging · Hefboom · Stroming</span>
+        <span className="text-foreground font-bold">OOST</span>
+      </div>
+      <div className="flex items-center gap-1 px-1">
+        {COUPLINGS.map((c, i) => (
+          <div key={c.id} className="flex-1 h-1.5 rounded-full" style={{ backgroundColor: c.color, opacity: 0.6 }} />
+        ))}
       </div>
 
       <Tabs defaultValue="coupling" className="w-full">
