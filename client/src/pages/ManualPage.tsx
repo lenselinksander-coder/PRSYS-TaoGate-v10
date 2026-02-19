@@ -69,21 +69,26 @@ const JURISDICTION_LAYERS = [
 ];
 
 const WOORDENLIJST = [
-  { term: "ORFHEUSS", category: "Systeem", definition: "De buitenste schil \u2014 de governance-console. Bevat alle modules (ARGOS, OLYMPIA, SCOPES, LEXICON)." },
-  { term: "PRSYS", category: "Systeem", definition: "Paontologisch Resonantie Systeem. Het filosofische hart van ORFHEUSS. Gebaseerd op Paontologie." },
+  { term: "ORFHEUSS", category: "Systeem", definition: "Limiting architecture framework voor AI-systemen die beslissingen be\u00efnvloeden. Geen model, geen methode \u2014 een begrenzende orde die v\u00f3\u00f3r output werkt. Bevat alle modules (ARGOS, OLYMPIA, SCOPES, LEXICON)." },
+  { term: "PRSYS", category: "Systeem", definition: "Paontologisch Resonantie Systeem. De runtime-architectuur die ORFHEUSS operationaliseert. ORFHEUSS bepaalt wat geldig is; PRSYS bepaalt hoe requests bewegen, welke module wordt aangesproken, en hoe output wordt gevalideerd." },
+  { term: "Canon (Layer 0)", category: "Systeem", definition: "Read-only normatieve kern: axioma\u2019s, formules, definities van geldigheid. Wijzigt alleen via formele Editio-procedure. De canon beweegt eerst, de architectuur volgt, de code implementeert. Nooit omgekeerd." },
+  { term: "Editio", category: "Systeem", definition: "Formele versie van de canon. Elke wijziging aan de normatieve kern vereist een Editio-upgrade met impactanalyse op alle lagen. Huidige versie: Editio I." },
   { term: "Paontologie", category: "Filosofie", definition: "Kruising van Merleau-Ponty (het lichaam als kennis) en Tao (de weg, de stroom). Organisaties als vliegwielen die op elkaar inwerken." },
-  { term: "ARGOS (TaoGate)", category: "Module", definition: "De poortwachter. Classificeert invoer in 5 gate-beslissingen op basis van de actieve scope. Elke invoer passeert eerst ARGOS." },
+  { term: "ARGOS (TaoGate)", category: "Module", definition: "De poortwachter (Layer 1). Deterministische gate-engine: mandaatcontrole, grensregels, routing, escalatie, audit. Classificeert invoer in 5 gate-beslissingen. Elke invoer passeert eerst ARGOS." },
   { term: "OLYMPIA", category: "Module", definition: "De regeluitvoeringslaag. Lost conflicten op tussen regels uit 4 jurisdictielagen (EU \u2192 Nationaal \u2192 Regionaal \u2192 Gemeentelijk)." },
   { term: "SCOPES", category: "Module", definition: "Organisatorische scope-definitie. Hier definieert u categorie\u00ebn, trefwoorden, escalatiepaden, documenten en regels per organisatie." },
   { term: "MC (Management Console)", category: "Concept", definition: "Elke scope is een MC. Een organisatie definieert haar eigen MC met eigen regels, categorieën en escalatiepaden." },
-  { term: "Scope", category: "Concept", definition: "Een complete set regels, categorieën en documenten die samen de governance van \u00e9\u00e9n organisatie vormen." },
+  { term: "Scope", category: "Concept", definition: "Een begrensde set toegestane acties binnen een organisatie. Bevat categorie\u00ebn, regels, documenten en escalatiepaden die samen de governance vormen." },
+  { term: "Mandaat", category: "Concept", definition: "Begrensde autorisatie met scope, vervaltijd en risicotolerantie. Mandaat is relationeel, niet hi\u00ebrarchisch. Geen mandaat = geen actie. (A11: M \u2260 U \u2014 Mandaat is geen autoriteit.)" },
   { term: "Gate-beslissing", category: "Concept", definition: "Het oordeel van de TaoGate over een invoer: PASS, PASS+TRANSPARANTIE, ESCALATIE MENS, ESCALATIE TOEZICHT, of BLOCK." },
   { term: "Regeldruk (F-druk)", category: "Concept", definition: "De som van alle regelgewichten in een scope. Hoge regeldruk = veel regels met hoge impact. Formule: \u03a3(laaggewicht \u00d7 actiegewicht)." },
   { term: "Jurisdictielaag", category: "Concept", definition: "Het bestuursniveau waarop een regel geldt: EU (hoogste), Nationaal, Regionaal, Gemeentelijk (laagste)." },
   { term: "Silent Violence", category: "Concept", definition: "Onzichtbare schade die ontstaat wanneer systemen niet op elkaar zijn afgestemd. Niemand benoemt het, maar iedereen voelt het." },
-  { term: "Escalatie", category: "Concept", definition: "Doorverwijzing naar een persoon of instantie die bevoegd is om te oordelen. Niet negatief \u2014 het is een beschermingsmechanisme." },
-  { term: "Audit Log", category: "Functie", definition: "Het geheugen van het systeem. Elke invoer wordt vastgelegd met tijdstip, classificatie, TaoGate-oordeel en Olympia-resultaat." },
-  { term: "BLOCK wint altijd", category: "Regel", definition: "Als \u00e9\u00e9n regel in het systeem BLOCK zegt, dan is het BLOCK. Ongeacht wat andere regels zeggen. Absolute grens." },
+  { term: "Escalatie", category: "Concept", definition: "Doorverwijzing naar een persoon of instantie die bevoegd is om te oordelen. Niet negatief \u2014 het is een beschermingsmechanisme. Default bij twijfel." },
+  { term: "Provenance", category: "Concept", definition: "Herkomstgegevens bij elke output: welke module, welke gate-status, welk mandaat, welk audit-ID. Elke beslissing is herleidbaar." },
+  { term: "Cerberus (Boundary Engine)", category: "Module", definition: "Absoluut stoprecht. Deterministische handhaving zonder interpretatie. Cerberus \u201cnee\u201d is niet overrulbaar. Vertaald in code: BLOCK wint altijd." },
+  { term: "Audit Log", category: "Functie", definition: "Het geheugen van het systeem. Elke invoer wordt vastgelegd met tijdstip, classificatie, TaoGate-oordeel en Olympia-resultaat. Volledige traceerbaarheid." },
+  { term: "BLOCK wint altijd", category: "Regel", definition: "Als \u00e9\u00e9n regel in het systeem BLOCK zegt, dan is het BLOCK. Ongeacht wat andere regels zeggen. Absolute grens. (Cerberus-principe.)" },
   { term: "Hogere laag wint", category: "Regel", definition: "Bij conflict tussen lagen wint de hogere jurisdictie. EU gaat boven Nationaal, Nationaal boven Regionaal, enzovoort." },
 ];
 

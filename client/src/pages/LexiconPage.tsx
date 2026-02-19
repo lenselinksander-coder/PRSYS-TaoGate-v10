@@ -22,11 +22,15 @@ const VERDIEPING = [
 ];
 
 const ATELIERS = [
-  { name: "Logos", role: "Ziet structuur", description: "Ordent wat zichtbaar is geworden. Spreekt in modellen, verbanden en samenhang. Komt pas aan het woord wanneer de situatie gelezen is.", color: "text-blue-400" },
-  { name: "Argos", role: "Bewaakt de horizon", description: "Ziet patronen over tijd, herhaling en afwijking. Waarschuwt wanneer kortetermijnrichting botst met langere lijnen.", color: "text-cyan-400", active: true },
-  { name: "Phrónēsis", role: "Belichaamde wijsheid", description: "Weegt wat klopt in de praktijk. Houdt menselijkheid voelbaar waar abstractie dreigt te overheersen.", color: "text-green-400" },
-  { name: "Arachne", role: "Weeft vorm", description: "Verbindt wat is waargenomen tot een patroon dat gedeeld kan worden. Maakt geen decoratie. Maakt samenhang zichtbaar.", color: "text-purple-400" },
-  { name: "Charon", role: "Begeleidt overgangen", description: "Niet door uitleg, maar door ritme. Zorgt dat betekenis van het ene veld naar het andere kan bewegen zonder te breken.", color: "text-amber-400" },
+  { name: "Argos", role: "Bewaakt de horizon", description: "Observation Module. Ziet patronen over tijd, herhaling en afwijking. Verzamelt context; geen interpretatie of advies.", color: "text-cyan-400", active: true },
+  { name: "Logos", role: "Ziet structuur", description: "Structuring Module. Ordent wat zichtbaar is geworden. Maakt beslisbaar zonder te bepalen; structuur zonder sturing.", color: "text-blue-400" },
+  { name: "Hermes", role: "Draagt over", description: "Transmission Module. Overdracht naar ontvanger zonder framing of verleiding.", color: "text-teal-400" },
+  { name: "Charon", role: "Begeleidt overgangen", description: "Closure Module. Afronding, documentatie, stewardship borgen.", color: "text-amber-400" },
+  { name: "Arachne", role: "Weeft samenhang", description: "Coherence Monitor. Leest bij elke stap mee en signaleert wanneer het weefsel rafelt. Geen blokkademacht, wel escalatiemacht.", color: "text-purple-400" },
+  { name: "Hypatia", role: "Bewaakt mandaat", description: "Ethics & Mandate Validator. Mandaat- en ethiektoets. Kan zelfstandig blokkeren of escaleren.", color: "text-rose-400" },
+  { name: "Phrónēsis", role: "Draagkracht", description: "Capacity Validator. Weegt of een mens of team dit kan dragen zonder overschrijding.", color: "text-green-400" },
+  { name: "Cerberus", role: "Absoluut stoprecht", description: "Boundary Engine. Deterministische handhaving. Cerberus 'nee' is absoluut en niet overrulbaar.", color: "text-red-400" },
+  { name: "Barbatos", role: "Externe toets", description: "External Reality Check. Tijdelijke, feitelijke toets van buiten het systeem. Alleen bij trigger.", color: "text-indigo-400" },
 ];
 
 const AXIOMAS = [
@@ -238,10 +242,12 @@ export default function LexiconPage() {
             ))}
           </div>
 
-          <div className="p-4 rounded-lg bg-card/30 border border-border/30">
+          <div className="p-4 rounded-lg bg-card/30 border border-border/30 space-y-2">
             <p className="text-sm text-muted-foreground italic">
-              Samen vormen Logos, Argos en Phrónēsis een dragend drieluik. 
-              Geen van hen heeft voorrang. Afstemming tussen deze drie voorkomt dat richting losraakt van realiteit.
+              Argos \u2192 Logos \u2192 Hermes \u2192 Charon vormen de core pipeline: waarneming v\u00f3\u00f3r ordening, ordening v\u00f3\u00f3r overdracht, overdracht v\u00f3\u00f3r afsluiting.
+            </p>
+            <p className="text-sm text-muted-foreground italic">
+              Arachne leest continu mee. Hypatia en Phr\u00f3n\u0113sis waken lateraal. Cerberus handhaaft absoluut. Barbatos toetst extern.
             </p>
           </div>
         </div>

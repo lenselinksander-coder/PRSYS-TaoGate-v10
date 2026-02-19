@@ -296,7 +296,7 @@ export default function OlympiaPage() {
 
   const domains = useMemo(() => {
     if (!activeScope?.rules) return [];
-    const unique = [...new Set((activeScope.rules as any[]).map(r => r.domain))];
+    const unique = Array.from(new Set((activeScope.rules as any[]).map(r => r.domain)));
     return unique;
   }, [activeScope]);
 
@@ -442,8 +442,8 @@ export default function OlympiaPage() {
                         <span className={cn("font-mono font-bold", DECISION_CONFIG[resolution.winningRule.action]?.color)}>
                           {DECISION_CONFIG[resolution.winningRule.action]?.label}
                         </span>
-                        <Badge variant="outline" className={cn("text-[10px]", LAYER_CONFIG[resolution.winningRule.layer]?.color, LAYER_CONFIG[resolution.winningRule.layer]?.border)}>
-                          {LAYER_CONFIG[resolution.winningRule.layer]?.label}
+                        <Badge variant="outline" className={cn("text-[10px]", LAYER_CONFIG[resolution.winningRule.layer as RuleLayer]?.color, LAYER_CONFIG[resolution.winningRule.layer as RuleLayer]?.border)}>
+                          {LAYER_CONFIG[resolution.winningRule.layer as RuleLayer]?.label}
                         </Badge>
                       </div>
                       <p className="text-sm text-foreground font-medium">{resolution.winningRule.title}</p>
