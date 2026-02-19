@@ -73,3 +73,13 @@ export async function deleteScope(id: string): Promise<void> {
   const res = await fetch(`/api/scopes/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete scope");
 }
+
+export async function classifyText(text: string, scopeId: string): Promise<{ status: string; category: string; escalation: string | null }> {
+  const res = await fetch("/api/classify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, scopeId }),
+  });
+  if (!res.ok) throw new Error("Failed to classify");
+  return res.json();
+}

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
-import { fetchObservations, fetchStats, createObservation, fetchScopes } from "@/lib/api";
+import { fetchObservations, fetchStats, createObservation, fetchScopes, classifyText } from "@/lib/api";
 import type { Scope, GateDecision } from "@shared/schema";
 
 const DECISION_CONFIG: Record<string, { label: string; shortLabel: string; color: string; bg: string; border: string; dot: string; icon: "check" | "info" | "alert" | "shield"; gateText: string }> = {
@@ -205,10 +205,10 @@ export default function ArgosPage() {
     return <BlankState />;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || mutation.isPending) return;
-    const result = classifyWithScope(input, activeScope);
+    const result = await classifyText(input, activeScope.id);
     mutation.mutate({
       text: input,
       status: result.status,
