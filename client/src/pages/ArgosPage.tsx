@@ -85,8 +85,9 @@ export default function ArgosPage() {
             <div className="p-2 bg-blue-600/20 text-blue-500 rounded-lg">
               <Eye className="w-6 h-6" />
             </div>
-            ORFHEUSS Argos
+            ARGOS TaoGate
           </h1>
+          <p className="text-xs font-mono text-primary/60 mt-0.5">Atelier Argos — Bewaakt de horizon</p>
           <p className="text-muted-foreground mt-1 font-mono text-sm">Pre-Governance — classify + escalate</p>
         </div>
         

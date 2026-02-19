@@ -61,6 +61,13 @@ Preferred communication style: Simple, everyday language.
 - **Development**: Vite dev server with HMR proxied through Express, `tsx` for server execution
 - **Production**: Client built to `dist/public/`, server bundled to `dist/index.cjs`, served as static files with SPA fallback
 
+### Pages
+- `/` — ARGOS TaoGate (Atelier Argos — pre-governance classification)
+- `/olympia` — OLYMPIA Decathlon (flywheel coupling visualization)
+- `/lexicon` — ORFHEUSS Lexicon (grondcyclus, ateliers, axioma's, ethiek)
+- `/manual` — Protocol Manual
+- `/readme` — Downloadable PDF guide
+
 ### Key Design Decisions
 1. **Monorepo structure** (`client/`, `server/`, `shared/`) with shared schema — keeps types synchronized between frontend and backend without a separate package
 2. **Drizzle over other ORMs** — lightweight, type-safe, close to SQL

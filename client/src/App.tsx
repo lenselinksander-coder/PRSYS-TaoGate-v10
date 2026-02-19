@@ -8,6 +8,7 @@ import Layout from "@/components/Layout";
 import ArgosPage from "@/pages/ArgosPage";
 import OlympiaPage from "@/pages/OlympiaPage";
 import ManualPage from "@/pages/ManualPage";
+import LexiconPage from "@/pages/LexiconPage";
 import ReadmePage from "@/pages/ReadmePage";
 
 function Router() {
@@ -16,6 +17,7 @@ function Router() {
       <Switch>
         <Route path="/" component={ArgosPage} />
         <Route path="/olympia" component={OlympiaPage} />
+        <Route path="/lexicon" component={LexiconPage} />
         <Route path="/manual" component={ManualPage} />
         <Route path="/readme" component={ReadmePage} />
         <Route component={NotFound} />
