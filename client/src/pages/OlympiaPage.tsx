@@ -37,12 +37,30 @@ type CouplingMode = {
   worstFor: string;
 };
 
+type HospitalExample = {
+  speedA: string;
+  speedB: string;
+  coupling: string;
+  name: string;
+  description: string;
+};
+
+const HOSPITAL_EXAMPLES: HospitalExample[] = [
+  { speedA: "sprint", speedB: "marathon", coupling: "worstelen", name: "SEH → Radiologie", description: "De SEH sprint, Radiologie loopt marathon. Ze moeten samenwerken (grip), maar het tempoverschil is groot. De SEH wil NU een scan, Radiologie werkt op schema." },
+  { speedA: "sprint", speedB: "horden", coupling: "aikido", name: "SEH → IC", description: "Beide draaien snel, maar de IC heeft een vast ritme (horden). De SEH gebruikt de structuur van de IC als hefboom om een patiënt geplaatst te krijgen." },
+  { speedA: "marathon", speedB: "marathon", coupling: "worstelen", name: "Radiologie → Laboratorium", description: "Twee afdelingen die allebei op constant tempo draaien. Wederzijds begrip en grip. Ze kennen elkaars ritme. Dit is de stabielste koppeling." },
+  { speedA: "estafette", speedB: "sprint", coupling: "capoeira", name: "OK → SEH", description: "De OK draagt patiënten over (estafette), de SEH stuurt nieuwe binnen (sprint). Het is half samenwerking, half concurrentie om capaciteit. Dans tussen chaos en structuur." },
+  { speedA: "triathlon", speedB: "horden", coupling: "turks-worstelen", name: "Management → Verpleging", description: "Management schakelt continu tussen onderwerpen (triathlon), verpleging heeft een vast dagritme (horden). Ze proberen grip te krijgen op elkaar, maar het glijdt weg — de contexten sluiten niet aan." },
+  { speedA: "marathon", speedB: "sprint", coupling: "yoga", name: "Farmacie → SEH", description: "Farmacie draait stabiel (marathon). Na een chaotische koppeling met de SEH (sprint) trekt Farmacie zich terug voor interne uitlijning. Eerst weer sterk worden, dan pas opnieuw koppelen." },
+  { speedA: "horden", speedB: "triathlon", coupling: "aikido", name: "Polikliniek → Opname-afd.", description: "De polikliniek werkt op afspraken (horden), de opname-afdeling schakelt continu (triathlon). De polikliniek gebruikt het tempo van de opname-afdeling als hefboom voor planning." },
+];
+
 const SPEEDS: Discipline[] = [
-  { id: "sprint", name: "Sprint", category: "Athletic", icon: FastForward, omega: 95, tau: 20, recovery: 100, description: "Maximale snelheid over korte tijd.", mechanicalRule: "P = max(ω)", color: "hsl(10, 80%, 60%)", plainExplanation: "Alles op alles, heel kort. Daarna ben je leeg.", example: "Spoedoperatie, deadline vandaag, crisis.", risk: "Burn-out als je blijft sprinten." },
-  { id: "estafette", name: "Estafette", category: "Athletic", icon: Repeat, omega: 80, tau: 40, recovery: 60, description: "Kritieke overdracht tussen systemen.", mechanicalRule: "sync(ω1, ω2)", color: "hsl(40, 90%, 60%)", plainExplanation: "Stokje doorgeven. Timing is alles.", example: "Dienst-overdracht, project overdragen.", risk: "Stokje valt als tempos niet kloppen." },
-  { id: "horden", name: "Horden", category: "Athletic", icon: Activity, omega: 70, tau: 50, recovery: 40, description: "Ritmische onderbrekingen.", mechanicalRule: "ω(t) = sin(t)", color: "hsl(150, 60%, 50%)", plainExplanation: "Rennen met vaste hindernissen.", example: "Vaste vergaderingen, geplande audits.", risk: "Verrassingen verstoren de cadans." },
-  { id: "marathon", name: "Marathon", category: "Athletic", icon: Play, omega: 40, tau: 90, recovery: 20, description: "Duurzame snelheid met ingebouwd herstel.", mechanicalRule: "∫P dt = const", color: "hsl(200, 80%, 60%)", plainExplanation: "Rustig en gelijkmatig. Lang vol te houden.", example: "Goed draaiend team, stabiele processen.", risk: "Laag. Gezondste modus." },
-  { id: "triathlon", name: "Triathlon", category: "Athletic", icon: Layers, omega: 60, tau: 70, recovery: 50, description: "Schakelen tussen contexten.", mechanicalRule: "Δctx → min(loss)", color: "hsl(280, 60%, 60%)", plainExplanation: "Steeds iets anders doen. Afwisselend.", example: "Manager die tussen vergaderingen springt.", risk: "Elk schakelen kost energie." },
+  { id: "sprint", name: "Sprint", category: "Athletic", icon: FastForward, omega: 95, tau: 20, recovery: 100, description: "Maximale snelheid over korte tijd.", mechanicalRule: "P = max(ω)", color: "hsl(10, 80%, 60%)", plainExplanation: "Alles op alles, heel kort. Daarna ben je leeg.", example: "SEH, traumateam, reanimatie, spoedoperatie.", risk: "Burn-out als je blijft sprinten." },
+  { id: "estafette", name: "Estafette", category: "Athletic", icon: Repeat, omega: 80, tau: 40, recovery: 60, description: "Kritieke overdracht tussen systemen.", mechanicalRule: "sync(ω1, ω2)", color: "hsl(40, 90%, 60%)", plainExplanation: "Stokje doorgeven. Timing is alles.", example: "OK → IC overdracht, dienstwisseling, patiënt-transfer.", risk: "Stokje valt als tempos niet kloppen." },
+  { id: "horden", name: "Horden", category: "Athletic", icon: Activity, omega: 70, tau: 50, recovery: 40, description: "Ritmische onderbrekingen.", mechanicalRule: "ω(t) = sin(t)", color: "hsl(150, 60%, 50%)", plainExplanation: "Rennen met vaste hindernissen.", example: "IC-rondes, medicatierondes, polikliniek-afspraken.", risk: "Verrassingen verstoren de cadans." },
+  { id: "marathon", name: "Marathon", category: "Athletic", icon: Play, omega: 40, tau: 90, recovery: 20, description: "Duurzame snelheid met ingebouwd herstel.", mechanicalRule: "∫P dt = const", color: "hsl(200, 80%, 60%)", plainExplanation: "Rustig en gelijkmatig. Lang vol te houden.", example: "Radiologie, laboratorium, farmacie, facilitair.", risk: "Laag. Gezondste modus." },
+  { id: "triathlon", name: "Triathlon", category: "Athletic", icon: Layers, omega: 60, tau: 70, recovery: 50, description: "Schakelen tussen contexten.", mechanicalRule: "Δctx → min(loss)", color: "hsl(280, 60%, 60%)", plainExplanation: "Steeds iets anders doen. Afwisselend.", example: "Afdelingshoofden, management, zorgcoördinatoren.", risk: "Elk schakelen kost energie." },
 ];
 
 const COUPLINGS: CouplingMode[] = [
@@ -148,14 +166,37 @@ function CouplingView() {
           <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">
-              Twee organisaties als vliegwielen. Drie keuzes:
+              Afdelingen zijn vliegwielen met een eigen tempo.
             </p>
-            <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1">
-              <li><strong className="text-foreground">Snelheid A</strong> — Op welk tempo draait de eerste organisatie? (Sprint, Marathon, etc.)</li>
-              <li><strong className="text-foreground">Snelheid B</strong> — Op welk tempo draait de tweede?</li>
-              <li><strong className="text-foreground">Koppeling</strong> — Hoe zitten ze aan elkaar vast? (Grip, Hefboom, Gladde context, etc.)</li>
-            </ol>
+            <p className="text-sm text-muted-foreground">
+              De SEH draait als een Sprint-wiel (hoge frequentie, korte pieken). Radiologie draait als Marathon (constant, voorspelbaar). 
+              Hoe ze aan elkaar vastzitten — via grip, hefboom, of zonder houvast — bepaalt of het systeem werkt of schuurt.
+            </p>
           </div>
+        </div>
+      </div>
+
+      {/* Hospital Quick Scenarios */}
+      <div>
+        <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">
+          Ziekenhuis-scenario's
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {HOSPITAL_EXAMPLES.map(ex => (
+            <button
+              key={ex.name}
+              data-testid={`button-scenario-${ex.name}`}
+              onClick={() => { setLeftId(ex.speedA); setRightId(ex.speedB); setCouplingId(ex.coupling); }}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-xs border transition-all",
+                leftId === ex.speedA && rightId === ex.speedB && couplingId === ex.coupling
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-card/30 border-border/50 text-muted-foreground hover:bg-card/80 hover:text-foreground"
+              )}
+            >
+              {ex.name}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -277,6 +318,18 @@ function CouplingView() {
                 <div className="text-xs text-muted-foreground">{right.name}</div>
               </div>
             </div>
+
+            {/* Hospital scenario match */}
+            {(() => {
+              const match = HOSPITAL_EXAMPLES.find(ex => ex.speedA === leftId && ex.speedB === rightId && ex.coupling === couplingId);
+              if (!match) return null;
+              return (
+                <div className="mt-4 pt-4 border-t border-border/30 p-3 rounded bg-primary/5 border border-primary/10">
+                  <p className="text-xs font-mono font-bold text-primary mb-1">{match.name}</p>
+                  <p className="text-xs text-muted-foreground">{match.description}</p>
+                </div>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
