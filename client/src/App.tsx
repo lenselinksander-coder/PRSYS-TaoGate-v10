@@ -8,6 +8,7 @@ import Layout from "@/components/Layout";
 import ArgosPage from "@/pages/ArgosPage";
 import OlympiaPage from "@/pages/OlympiaPage";
 import ManualPage from "@/pages/ManualPage";
+import ReadmePage from "@/pages/ReadmePage";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
         <Route path="/" component={ArgosPage} />
         <Route path="/olympia" component={OlympiaPage} />
         <Route path="/manual" component={ManualPage} />
+        <Route path="/readme" component={ReadmePage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

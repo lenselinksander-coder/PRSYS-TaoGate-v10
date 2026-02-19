@@ -158,6 +158,15 @@ export default function ManualPage() {
         </Card>
       </div>
 
+      {/* Footer / Readme Link */}
+      <div className="pt-8 border-t border-border/40 flex justify-center">
+        <Button asChild variant="outline" className="gap-2 border-primary/20 hover:bg-primary/5">
+          <Link href="/readme">
+            <FileText className="w-4 h-4" /> Download Jip & Janneke Handleiding (PDF)
+          </Link>
+        </Button>
+      </div>
+
     </div>
   );
 }
