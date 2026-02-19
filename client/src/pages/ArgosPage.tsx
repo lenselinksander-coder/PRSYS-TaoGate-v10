@@ -1,21 +1,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, Shield, CheckCircle, Terminal, BarChart2, Eye, AlertTriangle, UserCheck, Layers } from "lucide-react";
+import { Activity, Shield, CheckCircle, Terminal, BarChart2, Eye, Layers, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "wouter";
 import { fetchObservations, fetchStats, createObservation, fetchScopes } from "@/lib/api";
 import type { Scope, ScopeCategory } from "@shared/schema";
-
-const STATUS_ICONS: Record<string, typeof CheckCircle> = {
-  PASS: CheckCircle,
-  BLOCK: Shield,
-};
-
-const ESCALATION_COLORS: Record<string, string> = {};
 
 function classifyWithScope(text: string, scope: Scope): { status: "PASS" | "BLOCK"; category: string; escalation: string | null } {
   const lower = text.toLowerCase();
@@ -54,6 +48,69 @@ function buildPresets(scope: Scope): { text: string; status: "PASS" | "BLOCK"; c
   return presets;
 }
 
+function BlankState() {
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="border-b border-border/40 pb-6">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3" data-testid="text-page-title">
+          <div className="p-2 bg-blue-600/20 text-blue-500 rounded-lg">
+            <Eye className="w-6 h-6" />
+          </div>
+          ARGOS TaoGate
+        </h1>
+        <p className="text-xs font-mono text-primary/60 mt-0.5">Atelier Argos — Bewaakt de horizon</p>
+        <p className="text-muted-foreground mt-1 font-mono text-sm">Pre-Governance — classificeer + escaleer</p>
+      </div>
+
+      <Card className="bg-card/30 border-dashed border-primary/20">
+        <CardContent className="py-16 text-center">
+          <div className="w-20 h-20 rounded-full bg-primary/5 border border-primary/10 flex items-center justify-center mx-auto mb-6">
+            <Eye className="w-10 h-10 text-primary/20" />
+          </div>
+          <h2 className="text-2xl font-mono font-bold mb-3">Blanco Project</h2>
+          <p className="text-muted-foreground mb-2 max-w-md mx-auto">
+            De TaoGate wacht op een scope. Zonder scope is er geen classificatie, geen gate, geen escalatie.
+          </p>
+          <p className="text-xs text-muted-foreground/60 mb-8 max-w-lg mx-auto">
+            Maak een MC scope aan — met categorieën, trefwoorden, escalatiepaden, visiedocumenten en mandaten — en de TaoGate wordt automatisch ingevuld.
+          </p>
+          <Link href="/scopes">
+            <Button size="lg" data-testid="button-goto-scopes">
+              <Plus className="w-4 h-4 mr-2" />
+              Eerste MC Scope aanmaken
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-30">
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="pt-6">
+            <p className="text-sm font-medium text-muted-foreground">Totaal</p>
+            <h3 className="text-3xl font-mono font-bold mt-2">—</h3>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="pt-6">
+            <p className="text-sm font-medium text-muted-foreground">PASS</p>
+            <h3 className="text-3xl font-mono font-bold mt-2">—</h3>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/50 border-border/50">
+          <CardContent className="pt-6">
+            <p className="text-sm font-medium text-muted-foreground">BLOCK</p>
+            <h3 className="text-3xl font-mono font-bold mt-2">—</h3>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="text-center text-xs font-mono text-muted-foreground/40 pb-4">
+        Definieer een scope → de gate, classificatie en escalatiepaden verschijnen automatisch.
+      </div>
+    </div>
+  );
+}
+
 export default function ArgosPage() {
   const [input, setInput] = useState("");
   const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null);
@@ -68,18 +125,20 @@ export default function ArgosPage() {
     ? scopeList.find(s => s.id === selectedScopeId) 
     : scopeList.find(s => s.isDefault === "true") || scopeList[0];
 
-  const activeContext = activeScope?.name || "IC";
+  const activeContext = activeScope?.name || "";
 
   const { data: observations = [] } = useQuery({
-    queryKey: ["observations", activeScope?.id || activeContext],
+    queryKey: ["observations", activeScope?.id || "none"],
     queryFn: () => fetchObservations(activeContext, activeScope?.id),
     refetchInterval: 5000,
+    enabled: !!activeScope,
   });
 
   const { data: stats = { total: 0, passed: 0, blocked: 0 } } = useQuery({
-    queryKey: ["stats", activeScope?.id || activeContext],
+    queryKey: ["stats", activeScope?.id || "none"],
     queryFn: () => fetchStats(activeContext, activeScope?.id),
     refetchInterval: 5000,
+    enabled: !!activeScope,
   });
 
   const mutation = useMutation({
@@ -91,9 +150,13 @@ export default function ArgosPage() {
     },
   });
 
+  if (!activeScope || scopeList.length === 0) {
+    return <BlankState />;
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || mutation.isPending || !activeScope) return;
+    if (!input.trim() || mutation.isPending) return;
     const result = classifyWithScope(input, activeScope);
     mutation.mutate({
       text: input,
@@ -106,7 +169,6 @@ export default function ArgosPage() {
   };
 
   const handlePresetClick = (preset: { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }) => {
-    if (!activeScope) return;
     mutation.mutate({
       text: preset.text,
       status: preset.status,
@@ -117,12 +179,10 @@ export default function ArgosPage() {
     });
   };
 
-  const presets = activeScope ? buildPresets(activeScope) : [];
+  const presets = buildPresets(activeScope);
   const categoryLabels: Record<string, string> = {};
-  if (activeScope) {
-    for (const cat of activeScope.categories) {
-      categoryLabels[cat.name] = cat.label;
-    }
+  for (const cat of activeScope.categories) {
+    categoryLabels[cat.name] = cat.label;
   }
 
   return (
@@ -143,20 +203,20 @@ export default function ArgosPage() {
         <div className="flex items-center gap-3">
           {scopeList.length > 1 && (
             <select
-              value={activeScope?.id || ""}
+              value={activeScope.id}
               onChange={e => setSelectedScopeId(e.target.value)}
               className="h-9 rounded-md border border-primary/20 bg-card px-3 text-sm font-mono"
               data-testid="select-scope"
             >
               {scopeList.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+                <option key={s.id} value={s.id}>MC {s.name}</option>
               ))}
             </select>
           )}
           <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-2 px-4">
-            <Layers className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-mono text-muted-foreground">Scope:</span>
-            <span className="text-sm font-mono font-semibold text-primary">{activeContext}</span>
+            <Layers className="w-4 h-4 text-primary/60" />
+            <span className="text-sm font-mono font-bold text-primary">MC</span>
+            <span className="text-sm font-mono font-semibold text-foreground">{activeContext}</span>
           </div>
         </div>
       </div>
@@ -197,43 +257,41 @@ export default function ArgosPage() {
         </Card>
       </div>
 
-      {activeScope && (
-        <Card className="bg-card/50 backdrop-blur-sm border-primary/20">
-          <CardContent className="pt-6 pb-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-              {activeScope.categories.map((cat, i) => {
-                const isPass = cat.status === "PASS";
-                const borderColor = isPass ? "border-green-500/10" : "border-red-500/10";
-                const bgColor = isPass ? "bg-green-500/5" : "bg-red-500/5";
-                const iconColor = isPass ? "text-green-500" : "text-red-400";
-                const textColor = cat.color || iconColor;
-                
-                return (
-                  <div key={i} className={`flex items-center gap-2 p-2 rounded ${bgColor} border ${borderColor}`}>
-                    {isPass ? (
-                      <CheckCircle className={`w-3 h-3 ${iconColor}`} />
-                    ) : (
-                      <Shield className={`w-3 h-3 ${iconColor}`} />
-                    )}
-                    <div>
-                      <span className={`${textColor} font-semibold`}>{cat.label.toUpperCase()}</span>
-                      <span className="text-muted-foreground block">
-                        {isPass ? "→ PASS" : `→ ${cat.escalation}`}
-                      </span>
-                    </div>
+      <Card className="bg-card/50 backdrop-blur-sm border-primary/20">
+        <CardContent className="pt-6 pb-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+            {activeScope.categories.map((cat, i) => {
+              const isPass = cat.status === "PASS";
+              const borderColor = isPass ? "border-green-500/10" : "border-red-500/10";
+              const bgColor = isPass ? "bg-green-500/5" : "bg-red-500/5";
+              const iconColor = isPass ? "text-green-500" : "text-red-400";
+              const textColor = cat.color || iconColor;
+              
+              return (
+                <div key={i} className={`flex items-center gap-2 p-2 rounded ${bgColor} border ${borderColor}`}>
+                  {isPass ? (
+                    <CheckCircle className={`w-3 h-3 ${iconColor}`} />
+                  ) : (
+                    <Shield className={`w-3 h-3 ${iconColor}`} />
+                  )}
+                  <div>
+                    <span className={`${textColor} font-semibold`}>{cat.label.toUpperCase()}</span>
+                    <span className="text-muted-foreground block">
+                      {isPass ? "→ PASS" : `→ ${cat.escalation}`}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="bg-card/50 backdrop-blur-sm border-border/50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Activity className="w-5 h-5 text-primary" />
-            Invoer Classificatie
+            Invoer Classificatie — <span className="text-primary">MC</span> {activeContext}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -242,17 +300,13 @@ export default function ArgosPage() {
               data-testid="input-observation"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={activeScope ? `Invoer voor scope: ${activeScope.name}...` : "Voer een observatie of verzoek in..."} 
+              placeholder={`Invoer voor MC ${activeContext}...`} 
               className="font-mono text-sm bg-background/50 border-primary/20 focus-visible:ring-primary/30"
-              disabled={!activeScope}
             />
-            <Button data-testid="button-process" type="submit" disabled={mutation.isPending || !activeScope} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]">
+            <Button data-testid="button-process" type="submit" disabled={mutation.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]">
               {mutation.isPending ? "Scannen..." : "Classificeer"}
             </Button>
           </form>
-          {!activeScope && scopeList.length === 0 && (
-            <p className="text-xs text-muted-foreground/60 mt-3">Maak eerst een scope aan via de SCOPES pagina.</p>
-          )}
         </CardContent>
       </Card>
 
@@ -262,7 +316,7 @@ export default function ArgosPage() {
           <Card className="bg-card/50 backdrop-blur-sm border-border/50 h-full">
             <CardHeader>
               <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                Voorbeelden — {activeScope?.name} Scope
+                Voorbeelden — <span className="text-primary">MC</span> {activeScope.name}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -301,7 +355,7 @@ export default function ArgosPage() {
           <CardHeader className="border-b border-border/40 pb-4">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground uppercase tracking-wider">
               <Terminal className="w-4 h-4" />
-              Audit Log (Live)
+              Audit Log — <span className="text-primary">MC</span> {activeContext}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 p-0">
@@ -362,7 +416,7 @@ export default function ArgosPage() {
       </div>
 
       <div className="text-center text-xs font-mono text-muted-foreground/40 pb-4">
-        TaoGate staat observatie toe, blokkeert interventie, en waarborgt dat beslissingen menselijk geautoriseerd blijven.
+        MC {activeContext} — TaoGate observeert en classificeert. De mens autoriseert.
       </div>
     </div>
   );

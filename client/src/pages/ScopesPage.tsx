@@ -120,7 +120,7 @@ function ScopeEditor({ scope, onClose }: { scope?: Scope; onClose: () => void })
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold font-mono">{isEditing ? `Bewerk: ${scope.name}` : "Nieuwe Scope"}</h2>
+        <h2 className="text-xl font-bold font-mono">{isEditing ? <><span className="text-primary">MC</span> {scope.name} — Bewerken</> : <><span className="text-primary">MC</span> Nieuwe Scope</>}</h2>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={onClose} data-testid="button-cancel-scope">Annuleren</Button>
           <Button 
@@ -138,14 +138,17 @@ function ScopeEditor({ scope, onClose }: { scope?: Scope; onClose: () => void })
         <CardContent className="pt-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1.5 block">Naam *</label>
-              <Input 
-                data-testid="input-scope-name"
-                value={name} 
-                onChange={e => setName(e.target.value)} 
-                placeholder="bijv. IC, SEH, Radiologie, Verpleegafdeling..." 
-                className="font-mono"
-              />
+              <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1.5 block">Organisatie naam *</label>
+              <div className="flex items-center gap-0">
+                <span className="inline-flex items-center px-3 h-9 rounded-l-md border border-r-0 border-input bg-muted text-sm font-mono font-bold text-primary">MC</span>
+                <Input 
+                  data-testid="input-scope-name"
+                  value={name} 
+                  onChange={e => setName(e.target.value)} 
+                  placeholder="bijv. Kliniek, Ziekenhuis, Verpleeghuis, Rechtbank, Gemeente..." 
+                  className="font-mono rounded-l-none"
+                />
+              </div>
             </div>
             <div className="flex items-end gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -414,7 +417,7 @@ function ScopeCard({ scope, onEdit }: { scope: Scope; onEdit: (scope: Scope) => 
           <div className="flex justify-between items-start mb-3">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-mono font-bold text-lg">{scope.name}</h3>
+                <h3 className="font-mono font-bold text-lg"><span className="text-primary">MC</span> {scope.name}</h3>
                 {scope.isDefault === "true" && (
                   <Badge variant="secondary" className="text-[10px]">standaard</Badge>
                 )}
@@ -508,7 +511,7 @@ export default function ScopesPage() {
             </div>
             SCOPES
           </h1>
-          <p className="text-xs font-mono text-primary/60 mt-0.5">Organisatie-scopes — de sleutel tot elke context</p>
+          <p className="text-xs font-mono text-primary/60 mt-0.5">MC — Management Console per organisatie</p>
           <p className="text-muted-foreground mt-1 font-mono text-sm">Definieer classificatieregels, escalatiepaden en documenten per organisatie</p>
         </div>
         <Button onClick={() => setCreating(true)} data-testid="button-new-scope">
@@ -524,8 +527,8 @@ export default function ScopesPage() {
               <Layers className="w-4 h-4 text-primary/70" />
             </div>
             <div className="text-sm text-muted-foreground space-y-1">
-              <p>Elke scope definieert hoe de TaoGate classificeert binnen een specifieke organisatorische context.</p>
-              <p className="text-xs text-muted-foreground/60">Visiedocumenten, mandaten en huisregels vormen samen het fundament. Categorieën bepalen welke invoer doorgelaten (PASS) of geblokkeerd en geëscaleerd (BLOCK) wordt — en naar wie.</p>
+              <p>Elke <span className="text-primary font-mono font-bold">MC</span> scope definieert hoe de TaoGate classificeert binnen een specifieke organisatorische context.</p>
+              <p className="text-xs text-muted-foreground/60">Visiedocumenten, mandaten en huisregels vormen samen het fundament. Categorieën bepalen welke invoer doorgelaten (PASS) of geblokkeerd en geëscaleerd (BLOCK) wordt — en naar wie. MC = Management Console.</p>
             </div>
           </div>
         </CardContent>
@@ -535,11 +538,12 @@ export default function ScopesPage() {
         <Card className="bg-card/30 border-dashed border-border/40">
           <CardContent className="py-12 text-center">
             <Layers className="w-12 h-12 mx-auto mb-4 text-muted-foreground/20" />
-            <h3 className="font-mono font-semibold mb-2">Nog geen scopes</h3>
-            <p className="text-sm text-muted-foreground mb-4">Begin met het aanmaken van je eerste organisatie-scope.</p>
-            <Button onClick={() => setCreating(true)} variant="outline">
+            <h3 className="font-mono font-semibold mb-2 text-lg">Blanco Project</h3>
+            <p className="text-sm text-muted-foreground mb-1">Geen scopes gedefinieerd. Het systeem wacht op jouw organisatie.</p>
+            <p className="text-xs text-muted-foreground/60 mb-6">Maak je eerste MC scope aan — kliniek, ziekenhuis, verpleeghuis, rechtbank, gemeente — en de TaoGate, classificatie en escalatiepaden worden automatisch ingevuld.</p>
+            <Button onClick={() => setCreating(true)} size="lg">
               <Plus className="w-4 h-4 mr-2" />
-              Eerste scope aanmaken
+              Eerste MC Scope aanmaken
             </Button>
           </CardContent>
         </Card>
