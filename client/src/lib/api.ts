@@ -20,7 +20,7 @@ export async function fetchStats(context?: string, scopeId?: string) {
   return res.json();
 }
 
-export async function createObservation(data: { text: string; status: string; category: string; escalation: string | null; context: string; scopeId?: string }) {
+export async function createObservation(data: { text: string; status: string; category: string; escalation: string | null; context: string; scopeId?: string; olympiaRuleId?: string | null; olympiaAction?: string | null; olympiaLayer?: string | null }) {
   const res = await fetch("/api/observations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -84,7 +84,19 @@ export async function resolveOlympia(scopeId: string, domain?: string, category?
   return res.json();
 }
 
-export async function classifyText(text: string, scopeId: string): Promise<{ status: string; category: string; escalation: string | null }> {
+export type ClassifyResult = {
+  status: string;
+  category: string;
+  escalation: string | null;
+  olympiaRuleId: string | null;
+  olympiaAction: string | null;
+  olympiaLayer: string | null;
+  olympiaRule: { ruleId: string; layer: string; title: string; action: string; source?: string; article?: string } | null;
+  olympiaHasConflict: boolean;
+  olympiaPressure: number | "INFINITE";
+};
+
+export async function classifyText(text: string, scopeId: string): Promise<ClassifyResult> {
   const res = await fetch("/api/classify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

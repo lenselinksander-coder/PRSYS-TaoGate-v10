@@ -216,17 +216,24 @@ export default function ArgosPage() {
       escalation: result.escalation,
       context: activeContext,
       scopeId: activeScope.id,
+      olympiaRuleId: result.olympiaRuleId,
+      olympiaAction: result.olympiaAction,
+      olympiaLayer: result.olympiaLayer,
     });
   };
 
-  const handlePresetClick = (preset: { text: string; status: string; category: string; escalation: string | null }) => {
+  const handlePresetClick = async (preset: { text: string; status: string; category: string; escalation: string | null }) => {
+    const result = await classifyText(preset.text, activeScope.id);
     mutation.mutate({
       text: preset.text,
-      status: preset.status,
-      category: preset.category,
-      escalation: preset.escalation,
+      status: result.status,
+      category: result.category,
+      escalation: result.escalation,
       context: activeContext,
       scopeId: activeScope.id,
+      olympiaRuleId: result.olympiaRuleId,
+      olympiaAction: result.olympiaAction,
+      olympiaLayer: result.olympiaLayer,
     });
   };
 
@@ -464,6 +471,17 @@ export default function ArgosPage() {
                                   → Escalatie: {obs.escalation}
                                 </span>
                               )}
+                              {obs.olympiaRuleId && (
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                  obs.olympiaAction === "BLOCK" ? "bg-red-500/10 text-red-400" :
+                                  obs.olympiaAction === "ESCALATE_REGULATORY" ? "bg-orange-500/10 text-orange-400" :
+                                  obs.olympiaAction === "ESCALATE_HUMAN" ? "bg-amber-500/10 text-amber-400" :
+                                  obs.olympiaAction === "PASS_WITH_TRANSPARENCY" ? "bg-sky-500/10 text-sky-400" :
+                                  "bg-green-500/10 text-green-400"
+                                }`}>
+                                  Olympia: {obs.olympiaRuleId} [{obs.olympiaLayer}]
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -478,7 +496,7 @@ export default function ArgosPage() {
       </div>
 
       <div className="text-center text-xs font-mono text-muted-foreground/40 pb-4">
-        MC {activeContext} — TaoGate observeert en classificeert. De mens autoriseert.
+        MC {activeContext} — TaoGate classificeert → Olympia verdeelt kracht → De mens autoriseert.
       </div>
     </div>
   );

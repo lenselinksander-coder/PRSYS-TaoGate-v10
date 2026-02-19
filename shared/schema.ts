@@ -73,6 +73,9 @@ export const observations = pgTable("observations", {
   escalation: text("escalation"),
   context: text("context").notNull().default("IC"),
   scopeId: varchar("scope_id"),
+  olympiaRuleId: text("olympia_rule_id"),
+  olympiaAction: text("olympia_action"),
+  olympiaLayer: text("olympia_layer"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

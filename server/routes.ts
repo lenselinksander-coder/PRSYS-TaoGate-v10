@@ -26,6 +26,83 @@ function classifyWithScope(text: string, scope: Scope): { status: string; catego
   };
 }
 
+function resolveOlympiaRules(scope: Scope, domain?: string, category?: string) {
+  const rules = (scope.rules || []) as ScopeRule[];
+  let applicable = rules;
+  if (domain) {
+    applicable = applicable.filter(r => r.domain === domain);
+  }
+  if (category) {
+    applicable = applicable.filter(r =>
+      r.ruleId.toLowerCase().includes(category.toLowerCase()) ||
+      r.title.toLowerCase().includes(category.toLowerCase()) ||
+      r.domain.toLowerCase().includes(category.toLowerCase())
+    );
+  }
+
+  const priorityIndex = (layer: RuleLayer) => ruleLayers.indexOf(layer);
+  const actionSeverity = (action: string) => {
+    const order: Record<string, number> = { BLOCK: 5, ESCALATE_REGULATORY: 4, ESCALATE_HUMAN: 3, PASS_WITH_TRANSPARENCY: 2, PASS: 1 };
+    return order[action] || 0;
+  };
+  const sorted = [...applicable].sort((a, b) => priorityIndex(a.layer) - priorityIndex(b.layer) || actionSeverity(b.action) - actionSeverity(a.action));
+
+  let winningRule: ScopeRule | null = null;
+  for (const layer of ruleLayers) {
+    const layerRules = sorted.filter(r => r.layer === layer);
+    if (layerRules.length === 0) continue;
+
+    const layerBlock = layerRules.find(r => r.action === "BLOCK");
+    if (layerBlock) {
+      winningRule = layerBlock;
+      break;
+    }
+
+    const overriding = layerRules.filter(r => r.overridesLowerLayers);
+    if (overriding.length > 0) {
+      winningRule = overriding[0];
+      break;
+    }
+
+    if (!winningRule) {
+      winningRule = layerRules[0];
+    }
+  }
+
+  if (!winningRule && sorted.length > 0) {
+    winningRule = sorted[0];
+  }
+
+  const layerSummary = ruleLayers.map(layer => {
+    const layerRules = sorted.filter(r => r.layer === layer);
+    return {
+      layer,
+      priority: priorityIndex(layer) + 1,
+      ruleCount: layerRules.length,
+      rules: layerRules,
+      dominantAction: layerRules[0]?.action || null,
+    };
+  });
+
+  const hasConflict = new Set(sorted.map(r => r.action)).size > 1;
+
+  const pressure = sorted.reduce((acc, r) => {
+    if (r.action === "BLOCK") return Infinity;
+    const layerWeight = 4 - priorityIndex(r.layer);
+    const actionWeight = actionSeverity(r.action);
+    return acc + layerWeight * actionWeight;
+  }, 0);
+
+  return {
+    winningRule,
+    hasConflict,
+    pressure: pressure === Infinity ? "INFINITE" as const : pressure,
+    layers: layerSummary,
+    applicableRules: sorted,
+    totalRules: rules.length,
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -39,8 +116,22 @@ export async function registerRoutes(
     const scope = await storage.getScope(scopeId);
     if (!scope) return res.status(404).json({ error: "Scope not found" });
 
-    const result = classifyWithScope(text, scope);
-    return res.json(result);
+    const classification = classifyWithScope(text, scope);
+
+    const rules = (scope.rules || []) as ScopeRule[];
+    const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
+    const matchedDomain = availableDomains.find(d => classification.category.toUpperCase().includes(d.toUpperCase()));
+
+    const olympia = resolveOlympiaRules(scope, matchedDomain);
+    return res.json({
+      ...classification,
+      olympiaRuleId: olympia.winningRule?.ruleId || null,
+      olympiaAction: olympia.winningRule?.action || null,
+      olympiaLayer: olympia.winningRule?.layer || null,
+      olympiaRule: olympia.winningRule || null,
+      olympiaHasConflict: olympia.hasConflict,
+      olympiaPressure: olympia.pressure,
+    });
   });
 
   const resolveInputSchema = z.object({
@@ -59,83 +150,7 @@ export async function registerRoutes(
     const scope = await storage.getScope(scopeId);
     if (!scope) return res.status(404).json({ error: "Scope not found" });
 
-    const rules = (scope.rules || []) as ScopeRule[];
-    let applicable = rules;
-    if (domain) {
-      applicable = applicable.filter(r => r.domain === domain);
-    }
-    if (category) {
-      applicable = applicable.filter(r =>
-        r.ruleId.toLowerCase().includes(category.toLowerCase()) ||
-        r.title.toLowerCase().includes(category.toLowerCase()) ||
-        r.domain.toLowerCase().includes(category.toLowerCase())
-      );
-    }
-
-    const priorityIndex = (layer: RuleLayer) => ruleLayers.indexOf(layer);
-    const actionSeverity = (action: string) => {
-      const order: Record<string, number> = { BLOCK: 5, ESCALATE_REGULATORY: 4, ESCALATE_HUMAN: 3, PASS_WITH_TRANSPARENCY: 2, PASS: 1 };
-      return order[action] || 0;
-    };
-    const sorted = [...applicable].sort((a, b) => priorityIndex(a.layer) - priorityIndex(b.layer) || actionSeverity(b.action) - actionSeverity(a.action));
-
-    let winningRule: ScopeRule | null = null;
-    for (const layer of ruleLayers) {
-      const layerRules = sorted.filter(r => r.layer === layer);
-      if (layerRules.length === 0) continue;
-
-      const layerBlock = layerRules.find(r => r.action === "BLOCK");
-      if (layerBlock) {
-        winningRule = layerBlock;
-        break;
-      }
-
-      const overriding = layerRules.filter(r => r.overridesLowerLayers);
-      if (overriding.length > 0) {
-        winningRule = overriding[0];
-        break;
-      }
-
-      if (!winningRule) {
-        winningRule = layerRules[0];
-      }
-    }
-
-    if (!winningRule && sorted.length > 0) {
-      winningRule = sorted[0];
-    }
-
-    const layerSummary = ruleLayers.map(layer => {
-      const layerRules = sorted.filter(r => r.layer === layer);
-      return {
-        layer,
-        priority: priorityIndex(layer) + 1,
-        ruleCount: layerRules.length,
-        rules: layerRules,
-        dominantAction: layerRules[0]?.action || null,
-      };
-    });
-
-    const hasConflict = (() => {
-      const actions = new Set(sorted.map(r => r.action));
-      return actions.size > 1;
-    })();
-
-    const pressure = sorted.reduce((acc, r, _i) => {
-      if (r.action === "BLOCK") return Infinity;
-      const layerWeight = 4 - priorityIndex(r.layer);
-      const actionWeight = actionSeverity(r.action);
-      return acc + layerWeight * actionWeight;
-    }, 0);
-
-    return res.json({
-      winningRule,
-      hasConflict,
-      pressure: pressure === Infinity ? "INFINITE" : pressure,
-      layers: layerSummary,
-      applicableRules: sorted,
-      totalRules: rules.length,
-    });
+    return res.json(resolveOlympiaRules(scope, domain, category));
   });
 
   app.post("/api/observations", async (req, res) => {
