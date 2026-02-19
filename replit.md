@@ -11,11 +11,12 @@
 - When coupling fails, **Silent Violence** occurs: invisible damage that nobody names but everyone feels.
 - The overdrachtsratio (i = ω₁/ω₂) determines resonance vs. destruction.
 
-### Two Modules
-- **ARGOS (TaoGate)** — Pre-governance classification. Classifies input as safe observations (PASS) or interventions requiring authorization (BLOCK). Auto-categorizes into Observation, Intervention, Allocatie, or Command.
-- **OLYMPIA (Decathlon)** — Flywheel coupling visualization. Shows how two organizations/departments interact through speed selection and coupling mechanism. Hospital department examples (SEH, IC, Radiologie, etc.) make it concrete.
+### Modules
+- **ARGOS (TaoGate)** — Pre-governance classification. Dynamically loads classification rules from the active Scope. Categories, keywords, and escalation paths are all scope-defined.
+- **SCOPES** — Organizational scope management. Each scope defines classification categories (with PASS/BLOCK status, escalation targets, keywords) and organizational documents (visiedocumenten, mandaten, huisregels, protocollen). Scopes are the key to every organization.
+- **OLYMPIA (Decathlon)** — Flywheel coupling visualization. Shows how two organizations/departments interact through speed selection and coupling mechanism.
 
-The application also includes a Protocol Manual page and a printable/downloadable README page.
+The application also includes a Protocol Manual page, a Lexicon page, and a printable/downloadable README page.
 
 The UI language is predominantly **Dutch**, reflecting the target user base.
 
@@ -46,13 +47,22 @@ Preferred communication style: Simple, everyday language.
 - `POST /api/observations` — Create a new observation (validated with Zod)
 - `GET /api/observations?context=` — List observations, optionally filtered by context
 - `GET /api/observations/stats?context=` — Get aggregated stats (total, passed, blocked)
+- `GET /api/scopes` — List all scopes
+- `GET /api/scopes/default` — Get the default scope
+- `GET /api/scopes/:id` — Get a specific scope
+- `POST /api/scopes` — Create a new scope (validated with Zod)
+- `PUT /api/scopes/:id` — Update a scope
+- `DELETE /api/scopes/:id` — Delete a scope
 
 ### Data Storage
 - **Database**: PostgreSQL
 - **ORM**: Drizzle ORM with `drizzle-zod` for schema-to-validation integration
 - **Connection**: `node-postgres` (pg) pool via `DATABASE_URL` environment variable
-- **Schema**: Single `observations` table with fields: `id` (UUID), `text`, `status` (PASS/BLOCK), `category`, `context` (default "IC"), `createdAt`
+- **Schema**: Two tables:
+  - `observations`: `id` (UUID), `text`, `status` (PASS/BLOCK), `category`, `escalation`, `context` (default "IC"), `scopeId`, `createdAt`
+  - `scopes`: `id` (UUID), `name`, `description`, `categories` (JSONB — array of {name, label, status, escalation, keywords[], color}), `documents` (JSONB — array of {type, title, content}), `isDefault`, `createdAt`, `updatedAt`
 - **Migrations**: Managed via `drizzle-kit push` (schema-push approach, not migration files)
+- **Seed**: Default IC scope seeded on first startup (`server/seed.ts`)
 
 ### Shared Code
 - `shared/schema.ts` contains the Drizzle table definition, Zod insert schema, and TypeScript types — shared between frontend and backend
@@ -63,6 +73,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Pages
 - `/` — ARGOS TaoGate (Atelier Argos — pre-governance classification)
+- `/scopes` — SCOPES (organizational scope management — categories, keywords, escalation, documents)
 - `/olympia` — OLYMPIA Decathlon (flywheel coupling visualization)
 - `/lexicon` — ORFHEUSS Lexicon (grondcyclus, ateliers, axioma's, ethiek)
 - `/manual` — Protocol Manual

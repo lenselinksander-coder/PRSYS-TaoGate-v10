@@ -1,64 +1,84 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, Shield, CheckCircle, Terminal, BarChart2, Eye, AlertTriangle, UserCheck } from "lucide-react";
+import { Activity, Shield, CheckCircle, Terminal, BarChart2, Eye, AlertTriangle, UserCheck, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
-import { fetchObservations, fetchStats, createObservation } from "@/lib/api";
+import { fetchObservations, fetchStats, createObservation, fetchScopes } from "@/lib/api";
+import type { Scope, ScopeCategory } from "@shared/schema";
 
-type Classification = {
-  status: "PASS" | "BLOCK";
-  category: string;
-  escalation: string | null;
+const STATUS_ICONS: Record<string, typeof CheckCircle> = {
+  PASS: CheckCircle,
+  BLOCK: Shield,
 };
 
-const ESCALATION_MAP: Record<string, { label: string; color: string }> = {
-  Intensivist: { label: "→ Escalatie: Intensivist", color: "text-red-400" },
-  OvD: { label: "→ Escalatie: OvD", color: "text-orange-400" },
-  "IC-Hoofdarts": { label: "→ Escalatie: IC-Hoofdarts", color: "text-amber-400" },
-};
+const ESCALATION_COLORS: Record<string, string> = {};
 
-const PRESET_EXAMPLES: { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }[] = [
-  { text: "Bloeddruk 120/80, stabiel", status: "PASS", category: "Observation", escalation: null },
-  { text: "FiO2 40%, PEEP 5", status: "PASS", category: "Observation", escalation: null },
-  { text: "Op de hartbewaking en rusten", status: "PASS", category: "Observation", escalation: null },
-  { text: "30ml noradrenaline", status: "PASS", category: "Observation", escalation: null },
-  { text: "Intuberen", status: "BLOCK", category: "Clinical_Intervention", escalation: "Intensivist" },
-  { text: "Verhoog dosis noradrenaline", status: "BLOCK", category: "Clinical_Intervention", escalation: "Intensivist" },
-  { text: "Start medicatie", status: "BLOCK", category: "Clinical_Intervention", escalation: "Intensivist" },
-  { text: "Naar de OK", status: "BLOCK", category: "Clinical_Intervention", escalation: "Intensivist" },
-  { text: "Alarmeer extra personeel", status: "BLOCK", category: "Operational_Command", escalation: "OvD" },
-  { text: "Stuur team naar kamer 4", status: "BLOCK", category: "Operational_Command", escalation: "OvD" },
-  { text: "Activeer trauma team", status: "BLOCK", category: "Operational_Command", escalation: "OvD" },
-  { text: "Wijs bed 7 toe aan patiënt", status: "BLOCK", category: "Allocation", escalation: "IC-Hoofdarts" },
-  { text: "Verplaats patiënt naar bed 3", status: "BLOCK", category: "Allocation", escalation: "IC-Hoofdarts" },
-  { text: "Bedindeling aanpassen", status: "BLOCK", category: "Allocation", escalation: "IC-Hoofdarts" },
-];
+function classifyWithScope(text: string, scope: Scope): { status: "PASS" | "BLOCK"; category: string; escalation: string | null } {
+  const lower = text.toLowerCase();
+  
+  const blockCategories = scope.categories.filter(c => c.status === "BLOCK");
+  for (const cat of blockCategories) {
+    if (cat.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
+      return { status: "BLOCK", category: cat.name, escalation: cat.escalation };
+    }
+  }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  Observation: "Observatie",
-  Clinical_Intervention: "Klinische Interventie",
-  Operational_Command: "Operationeel Commando",
-  Allocation: "Allocatie",
-};
+  const defaultPass = scope.categories.find(c => c.status === "PASS");
+  return { 
+    status: "PASS", 
+    category: defaultPass?.name || "Observation", 
+    escalation: null 
+  };
+}
+
+function buildPresets(scope: Scope): { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }[] {
+  const presets: { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }[] = [];
+  
+  for (const cat of scope.categories) {
+    if (cat.keywords.length > 0) {
+      const sampleKeywords = cat.keywords.slice(0, 3);
+      for (const kw of sampleKeywords) {
+        presets.push({
+          text: kw.charAt(0).toUpperCase() + kw.slice(1),
+          status: cat.status,
+          category: cat.name,
+          escalation: cat.escalation,
+        });
+      }
+    }
+  }
+  return presets;
+}
 
 export default function ArgosPage() {
   const [input, setInput] = useState("");
-  const [selectedContext] = useState("IC");
+  const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
+  const { data: scopeList = [] } = useQuery({
+    queryKey: ["scopes"],
+    queryFn: fetchScopes,
+  });
+
+  const activeScope = selectedScopeId 
+    ? scopeList.find(s => s.id === selectedScopeId) 
+    : scopeList.find(s => s.isDefault === "true") || scopeList[0];
+
+  const activeContext = activeScope?.name || "IC";
+
   const { data: observations = [] } = useQuery({
-    queryKey: ["observations", selectedContext],
-    queryFn: () => fetchObservations(selectedContext),
+    queryKey: ["observations", activeScope?.id || activeContext],
+    queryFn: () => fetchObservations(activeContext, activeScope?.id),
     refetchInterval: 5000,
   });
 
   const { data: stats = { total: 0, passed: 0, blocked: 0 } } = useQuery({
-    queryKey: ["stats", selectedContext],
-    queryFn: () => fetchStats(selectedContext),
+    queryKey: ["stats", activeScope?.id || activeContext],
+    queryFn: () => fetchStats(activeContext, activeScope?.id),
     refetchInterval: 5000,
   });
 
@@ -71,48 +91,39 @@ export default function ArgosPage() {
     },
   });
 
-  const classify = (text: string): Classification => {
-    const lower = text.toLowerCase();
-
-    const interventionVerbs = ["intuberen", "start medicatie", "verhoog", "verlaag", "stop medicatie", "geef", "dien toe", "sedatie", "naar de ok", "opereren", "beademen", "extuberen", "bolus", "infuus"];
-    const commandVerbs = ["alarmeer", "stuur team", "activeer", "mobiliseer", "ontruim", "inzetten", "oproepen", "dispatch"];
-    const allocationVerbs = ["wijs bed", "verplaats patiënt", "bedindeling", "toewijzen", "transfereer", "overplaats", "bed toewijzen"];
-
-    if (allocationVerbs.some(v => lower.includes(v))) {
-      return { status: "BLOCK", category: "Allocation", escalation: "IC-Hoofdarts" };
-    }
-    if (commandVerbs.some(v => lower.includes(v))) {
-      return { status: "BLOCK", category: "Operational_Command", escalation: "OvD" };
-    }
-    if (interventionVerbs.some(v => lower.includes(v))) {
-      return { status: "BLOCK", category: "Clinical_Intervention", escalation: "Intensivist" };
-    }
-
-    return { status: "PASS", category: "Observation", escalation: null };
-  };
-
-  const handleExampleClick = (example: typeof PRESET_EXAMPLES[number]) => {
-    mutation.mutate({
-      text: example.text,
-      status: example.status,
-      category: example.category,
-      escalation: example.escalation,
-      context: selectedContext,
-    });
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || mutation.isPending) return;
-    const result = classify(input);
+    if (!input.trim() || mutation.isPending || !activeScope) return;
+    const result = classifyWithScope(input, activeScope);
     mutation.mutate({
       text: input,
       status: result.status,
       category: result.category,
       escalation: result.escalation,
-      context: selectedContext,
+      context: activeContext,
+      scopeId: activeScope.id,
     });
   };
+
+  const handlePresetClick = (preset: { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }) => {
+    if (!activeScope) return;
+    mutation.mutate({
+      text: preset.text,
+      status: preset.status,
+      category: preset.category,
+      escalation: preset.escalation,
+      context: activeContext,
+      scopeId: activeScope.id,
+    });
+  };
+
+  const presets = activeScope ? buildPresets(activeScope) : [];
+  const categoryLabels: Record<string, string> = {};
+  if (activeScope) {
+    for (const cat of activeScope.categories) {
+      categoryLabels[cat.name] = cat.label;
+    }
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -129,10 +140,24 @@ export default function ArgosPage() {
           <p className="text-muted-foreground mt-1 font-mono text-sm">Pre-Governance — classificeer + escaleer</p>
         </div>
         
-        <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-2 px-4">
-          <Activity className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-mono text-muted-foreground">Scope:</span>
-          <span className="text-sm font-mono font-semibold text-primary">IC</span>
+        <div className="flex items-center gap-3">
+          {scopeList.length > 1 && (
+            <select
+              value={activeScope?.id || ""}
+              onChange={e => setSelectedScopeId(e.target.value)}
+              className="h-9 rounded-md border border-primary/20 bg-card px-3 text-sm font-mono"
+              data-testid="select-scope"
+            >
+              {scopeList.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+          <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-2 px-4">
+            <Layers className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-mono text-muted-foreground">Scope:</span>
+            <span className="text-sm font-mono font-semibold text-primary">{activeContext}</span>
+          </div>
         </div>
       </div>
 
@@ -172,40 +197,37 @@ export default function ArgosPage() {
         </Card>
       </div>
 
-      <Card className="bg-card/50 backdrop-blur-sm border-primary/20">
-        <CardContent className="pt-6 pb-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
-            <div className="flex items-center gap-2 p-2 rounded bg-green-500/5 border border-green-500/10">
-              <CheckCircle className="w-3 h-3 text-green-500" />
-              <div>
-                <span className="text-green-400 font-semibold">OBSERVATION</span>
-                <span className="text-muted-foreground block">→ PASS</span>
-              </div>
+      {activeScope && (
+        <Card className="bg-card/50 backdrop-blur-sm border-primary/20">
+          <CardContent className="pt-6 pb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+              {activeScope.categories.map((cat, i) => {
+                const isPass = cat.status === "PASS";
+                const borderColor = isPass ? "border-green-500/10" : "border-red-500/10";
+                const bgColor = isPass ? "bg-green-500/5" : "bg-red-500/5";
+                const iconColor = isPass ? "text-green-500" : "text-red-400";
+                const textColor = cat.color || iconColor;
+                
+                return (
+                  <div key={i} className={`flex items-center gap-2 p-2 rounded ${bgColor} border ${borderColor}`}>
+                    {isPass ? (
+                      <CheckCircle className={`w-3 h-3 ${iconColor}`} />
+                    ) : (
+                      <Shield className={`w-3 h-3 ${iconColor}`} />
+                    )}
+                    <div>
+                      <span className={`${textColor} font-semibold`}>{cat.label.toUpperCase()}</span>
+                      <span className="text-muted-foreground block">
+                        {isPass ? "→ PASS" : `→ ${cat.escalation}`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center gap-2 p-2 rounded bg-red-500/5 border border-red-500/10">
-              <Shield className="w-3 h-3 text-red-400" />
-              <div>
-                <span className="text-red-400 font-semibold">INTERVENTIE</span>
-                <span className="text-muted-foreground block">→ Intensivist</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-2 rounded bg-orange-500/5 border border-orange-500/10">
-              <AlertTriangle className="w-3 h-3 text-orange-400" />
-              <div>
-                <span className="text-orange-400 font-semibold">COMMANDO</span>
-                <span className="text-muted-foreground block">→ OvD</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-2 rounded bg-amber-500/5 border border-amber-500/10">
-              <UserCheck className="w-3 h-3 text-amber-400" />
-              <div>
-                <span className="text-amber-400 font-semibold">ALLOCATIE</span>
-                <span className="text-muted-foreground block">→ IC-Hoofdarts</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="bg-card/50 backdrop-blur-sm border-border/50">
         <CardHeader>
@@ -220,56 +242,62 @@ export default function ArgosPage() {
               data-testid="input-observation"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Voer een observatie of verzoek in..." 
+              placeholder={activeScope ? `Invoer voor scope: ${activeScope.name}...` : "Voer een observatie of verzoek in..."} 
               className="font-mono text-sm bg-background/50 border-primary/20 focus-visible:ring-primary/30"
+              disabled={!activeScope}
             />
-            <Button data-testid="button-process" type="submit" disabled={mutation.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]">
+            <Button data-testid="button-process" type="submit" disabled={mutation.isPending || !activeScope} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]">
               {mutation.isPending ? "Scannen..." : "Classificeer"}
             </Button>
           </form>
+          {!activeScope && scopeList.length === 0 && (
+            <p className="text-xs text-muted-foreground/60 mt-3">Maak eerst een scope aan via de SCOPES pagina.</p>
+          )}
         </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50 h-full">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              Voorbeelden — IC Scope
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {PRESET_EXAMPLES.map((ex, i) => (
-              <div 
-                key={i}
-                data-testid={`button-example-${i}`}
-                onClick={() => handleExampleClick(ex)}
-                className="group flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 cursor-pointer transition-all border border-transparent hover:border-primary/10"
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  {ex.status === "PASS" ? (
-                    <CheckCircle className="w-3.5 h-3.5 text-green-500/70 flex-shrink-0" />
-                  ) : (
-                    <Shield className="w-3.5 h-3.5 text-destructive/70 flex-shrink-0" />
-                  )}
-                  <span className="text-sm text-foreground/90 truncate">{ex.text}</span>
+        {presets.length > 0 && (
+          <Card className="bg-card/50 backdrop-blur-sm border-border/50 h-full">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                Voorbeelden — {activeScope?.name} Scope
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {presets.map((ex, i) => (
+                <div 
+                  key={i}
+                  data-testid={`button-example-${i}`}
+                  onClick={() => handlePresetClick(ex)}
+                  className="group flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 cursor-pointer transition-all border border-transparent hover:border-primary/10"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {ex.status === "PASS" ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-green-500/70 flex-shrink-0" />
+                    ) : (
+                      <Shield className="w-3.5 h-3.5 text-destructive/70 flex-shrink-0" />
+                    )}
+                    <span className="text-sm text-foreground/90 truncate">{ex.text}</span>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
+                    <Badge variant={ex.status === "PASS" ? "secondary" : "destructive"} className="font-mono text-[10px] tracking-wider">
+                      {ex.status}
+                    </Badge>
+                    {ex.escalation && (
+                      <span className="text-[10px] font-mono text-muted-foreground">
+                        {ex.escalation}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                  <Badge variant={ex.status === "PASS" ? "secondary" : "destructive"} className="font-mono text-[10px] tracking-wider">
-                    {ex.status}
-                  </Badge>
-                  {ex.escalation && (
-                    <span className={`text-[10px] font-mono ${ESCALATION_MAP[ex.escalation]?.color || "text-muted-foreground"}`}>
-                      {ex.escalation}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50 h-full flex flex-col">
+        <Card className={`bg-card/50 backdrop-blur-sm border-border/50 h-full flex flex-col ${presets.length === 0 ? 'lg:col-span-2' : ''}`}>
           <CardHeader className="border-b border-border/40 pb-4">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground uppercase tracking-wider">
               <Terminal className="w-4 h-4" />
@@ -308,7 +336,7 @@ export default function ArgosPage() {
                               {new Date(obs.createdAt).toLocaleTimeString()} — ID: {obs.id.slice(0, 8)}
                             </span>
                             <Badge variant={obs.status === "PASS" ? "outline" : "destructive"} className="text-[10px] h-5">
-                              {CATEGORY_LABELS[obs.category] || obs.category}
+                              {categoryLabels[obs.category] || obs.category}
                             </Badge>
                           </div>
                           <p className="text-sm font-medium" data-testid={`text-observation-${obs.id}`}>{obs.text}</p>
@@ -316,9 +344,9 @@ export default function ArgosPage() {
                             <span className="text-[10px] font-mono bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground">
                               TaoGate: {obs.status === "PASS" ? "PASS — Geen escalatie" : "BLOCK"}
                             </span>
-                            {obs.escalation && ESCALATION_MAP[obs.escalation] && (
-                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/50 ${ESCALATION_MAP[obs.escalation].color}`}>
-                                {ESCALATION_MAP[obs.escalation].label}
+                            {obs.escalation && (
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-orange-400">
+                                → Escalatie: {obs.escalation}
                               </span>
                             )}
                           </div>
