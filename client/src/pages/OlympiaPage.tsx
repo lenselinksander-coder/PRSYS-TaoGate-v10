@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Play, FastForward, Activity, Wind, Zap, Anchor, Layers, Box, Circle, Repeat, Info, AlertTriangle, CheckCircle } from "lucide-react";
+import { Play, FastForward, Activity, Wind, Zap, Anchor, Layers, Box, Circle, Repeat, Info, AlertTriangle, CheckCircle, Link2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Line } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from "recharts";
 
 type Discipline = {
   id: string;
@@ -146,248 +147,379 @@ function getHealthStatus(d: Discipline) {
   return { label: "GEZOND", color: "text-green-500", bg: "bg-green-500/10 border-green-500/20", icon: CheckCircle };
 }
 
-export default function OlympiaPage() {
+function Flywheel({ discipline, size, speed, direction = 1, label }: { 
+  discipline: Discipline; size: number; speed: number; direction?: number; label: string 
+}) {
+  const segments = 8;
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{label}</span>
+      <div className="relative" style={{ width: size, height: size }}>
+        <motion.div
+          className="absolute inset-0 rounded-full border-2 flex items-center justify-center"
+          style={{ borderColor: discipline.color }}
+          animate={{ rotate: direction * 360 }}
+          transition={{ duration: Math.max(1, 10 - speed / 15), repeat: Infinity, ease: "linear" }}
+        >
+          {Array.from({ length: segments }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-full h-full"
+              style={{ transform: `rotate(${(360 / segments) * i}deg)` }}
+            >
+              <div
+                className="absolute top-0 left-1/2 -translate-x-1/2 w-1 rounded-full"
+                style={{ 
+                  height: size * 0.35,
+                  backgroundColor: discipline.color,
+                  opacity: 0.4 + (i % 2) * 0.3,
+                }}
+              />
+            </div>
+          ))}
+          <div className="absolute inset-[20%] rounded-full bg-background border flex items-center justify-center" style={{ borderColor: discipline.color + '40' }}>
+            <discipline.icon className="w-6 h-6" style={{ color: discipline.color }} />
+          </div>
+        </motion.div>
+        <div className="absolute -bottom-1 -right-1 bg-background rounded px-1.5 py-0.5 border text-[10px] font-mono" style={{ borderColor: discipline.color + '40', color: discipline.color }}>
+          ω {discipline.omega}
+        </div>
+      </div>
+      <span className="font-bold text-sm mt-1">{discipline.name}</span>
+    </div>
+  );
+}
+
+function CouplingView() {
+  const [leftId, setLeftId] = useState("marathon");
+  const [rightId, setRightId] = useState("sprint");
+  const left = DISCIPLINES.find(d => d.id === leftId)!;
+  const right = DISCIPLINES.find(d => d.id === rightId)!;
+  
+  const ratio = left.omega / right.omega;
+  const mismatch = Math.abs(1 - ratio);
+  const leftSize = 140 + left.tau;
+  const rightSize = 140 + right.tau;
+  
+  let couplingStatus: { label: string; description: string; color: string; emoji: string };
+  if (mismatch < 0.3) {
+    couplingStatus = {
+      label: "RESONANTIE",
+      description: "De wielen draaien op vergelijkbare frequentie. Energie stroomt vrij tussen beide systemen. Dit is Attunement.",
+      color: "text-green-500",
+      emoji: "✓"
+    };
+  } else if (mismatch < 0.6) {
+    couplingStatus = {
+      label: "SPANNING",
+      description: "De wielen draaien met verschil in tempo. Er is frictie, maar de koppeling houdt stand. Er gaat energie verloren aan de overdracht.",
+      color: "text-amber-500",
+      emoji: "⚠"
+    };
+  } else {
+    couplingStatus = {
+      label: "DISSIPATIE",
+      description: "De wielen draaien te ver uit sync. Het grote wiel dreigt het kleine kapot te maken, of het kleine wiel raakt losgekoppeld. Energie gaat verloren als schade.",
+      color: "text-red-500",
+      emoji: "✕"
+    };
+  }
+
+  return (
+    <div className="space-y-8">
+      
+      {/* Explanation */}
+      <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
+        <div className="flex items-start gap-3">
+          <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">
+              Organisaties zijn vliegwielen die in elkaar haken.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Een corporate (groot wiel, langzaam maar krachtig) en een startup (klein wiel, snel maar licht) 
+              kunnen samenwerken — als de koppeling klopt. De startup brengt enthousiasme en snelheid. 
+              De corporate brengt draagkracht en stabiliteit. Maar als de frequenties te ver uit elkaar liggen, 
+              ontstaat er schade in plaats van synergie.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Selectors */}
+      <div className="grid grid-cols-2 gap-6">
+        <div>
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Vliegwiel A</label>
+          <select 
+            data-testid="select-flywheel-a"
+            value={leftId} 
+            onChange={e => setLeftId(e.target.value)}
+            className="w-full bg-card border border-border rounded-md p-2.5 text-sm"
+          >
+            {DISCIPLINES.map(d => (
+              <option key={d.id} value={d.id}>{d.name} — ω {d.omega}, τ {d.tau}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 block">Vliegwiel B</label>
+          <select 
+            data-testid="select-flywheel-b"
+            value={rightId} 
+            onChange={e => setRightId(e.target.value)}
+            className="w-full bg-card border border-border rounded-md p-2.5 text-sm"
+          >
+            {DISCIPLINES.map(d => (
+              <option key={d.id} value={d.id}>{d.name} — ω {d.omega}, τ {d.tau}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Flywheels Visual */}
+      <Card className="bg-card/50 backdrop-blur-md border-border/50 overflow-hidden">
+        <CardContent className="pt-8 pb-8">
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <Flywheel discipline={left} size={leftSize} speed={left.omega} direction={1} label="Vliegwiel A" />
+            
+            {/* Coupling Link */}
+            <div className="flex flex-col items-center gap-2 px-4">
+              <motion.div
+                animate={{ 
+                  scale: mismatch < 0.3 ? [1, 1.1, 1] : mismatch < 0.6 ? [1, 1.05, 1] : [1, 0.95, 1],
+                }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                <Link2 className={cn("w-8 h-8", couplingStatus.color)} />
+              </motion.div>
+              <div className="text-center">
+                <div className={cn("text-xs font-mono font-bold", couplingStatus.color)}>
+                  i = {ratio.toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground">overdrachtsratio</div>
+              </div>
+            </div>
+
+            <Flywheel discipline={right} size={rightSize} speed={right.omega} direction={-1} label="Vliegwiel B" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Coupling Status */}
+      <Card className={cn("border", 
+        mismatch < 0.3 ? "bg-green-500/5 border-green-500/20" : 
+        mismatch < 0.6 ? "bg-amber-500/5 border-amber-500/20" : 
+        "bg-red-500/5 border-red-500/20"
+      )}>
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-4">
+            <span className="text-3xl">{couplingStatus.emoji}</span>
+            <div className="space-y-2 flex-1">
+              <h3 className={cn("text-lg font-bold font-mono", couplingStatus.color)}>
+                {couplingStatus.label}
+              </h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {couplingStatus.description}
+              </p>
+              
+              {/* Detail Metrics */}
+              <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-border/30">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Frequentie A</div>
+                  <div className="font-mono font-bold" style={{ color: left.color }}>ω = {left.omega}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Frequentie B</div>
+                  <div className="font-mono font-bold" style={{ color: right.color }}>ω = {right.omega}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Verschil</div>
+                  <div className={cn("font-mono font-bold", couplingStatus.color)}>
+                    {(mismatch * 100).toFixed(0)}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Practical Advice */}
+              <div className="mt-4 p-3 rounded bg-background/50 border border-border/30">
+                <p className="text-xs font-medium text-foreground mb-1">Wat betekent dit?</p>
+                <p className="text-xs text-muted-foreground">
+                  {mismatch < 0.3 
+                    ? `${left.name} en ${right.name} draaien op vergelijkbare frequentie. Ze versterken elkaar. De grote brengt draagkracht, de kleine brengt energie. Dit is het ideaal.`
+                    : mismatch < 0.6 
+                    ? `${left.name} en ${right.name} hebben een verschil in tempo. De overdracht kost extra energie. Afstemming (Attunement) is nodig: wie versnelt, wie vertraagt?`
+                    : `${left.name} en ${right.name} zijn te ver uit sync. Als ze gekoppeld blijven, maakt het snellere systeem het tragere kapot — of het tragere remt het snellere af tot stilstand. Ontkoppelen of fundamenteel herpositioneren is nodig.`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function SoloView() {
   const [selectedId, setSelectedId] = useState<string>("sprint");
   const activeDiscipline = DISCIPLINES.find(d => d.id === selectedId)!;
   const chartData = generateData(activeDiscipline);
   const health = getHealthStatus(activeDiscipline);
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
-      {/* Header */}
+      {/* LEFT: Selector */}
+      <div className="lg:col-span-4 space-y-6">
+        <div>
+          <h3 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-1 pl-1">Atletisch</h3>
+          <p className="text-xs text-muted-foreground mb-3 pl-1">Hoe hard en hoe lang beweegt de organisatie?</p>
+          <div className="space-y-1">
+            {DISCIPLINES.filter(d => d.category === "Athletic").map(d => (
+              <button key={d.id} data-testid={`button-discipline-${d.id}`} onClick={() => setSelectedId(d.id)}
+                className={cn("w-full flex items-center gap-3 p-3 rounded-md text-left transition-all border",
+                  selectedId === d.id ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_15px_rgba(6,182,212,0.15)]" : "bg-card/30 border-transparent hover:bg-card/80 hover:border-border text-muted-foreground"
+                )}>
+                <d.icon className="w-5 h-5 opacity-70" />
+                <div className="flex-1">
+                  <span className="font-medium text-sm">{d.name}</span>
+                  <p className="text-xs opacity-60 mt-0.5">{d.plainExplanation}</p>
+                </div>
+                {selectedId === d.id && <motion.div layoutId="solo-dot" className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h3 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-1 pl-1">Martiaal / Vloeiend</h3>
+          <p className="text-xs text-muted-foreground mb-3 pl-1">Hoe gaat de organisatie om met weerstand?</p>
+          <div className="space-y-1">
+            {DISCIPLINES.filter(d => d.category === "Martial").map(d => (
+              <button key={d.id} data-testid={`button-discipline-${d.id}`} onClick={() => setSelectedId(d.id)}
+                className={cn("w-full flex items-center gap-3 p-3 rounded-md text-left transition-all border",
+                  selectedId === d.id ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_15px_rgba(6,182,212,0.15)]" : "bg-card/30 border-transparent hover:bg-card/80 hover:border-border text-muted-foreground"
+                )}>
+                <d.icon className="w-5 h-5 opacity-70" />
+                <div className="flex-1">
+                  <span className="font-medium text-sm">{d.name}</span>
+                  <p className="text-xs opacity-60 mt-0.5">{d.plainExplanation}</p>
+                </div>
+                {selectedId === d.id && <motion.div layoutId="solo-dot" className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT: Detail */}
+      <div className="lg:col-span-8 space-y-6">
+        <Card className="bg-card/50 backdrop-blur-md border-border/50 overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-32 opacity-5 pointer-events-none rounded-full blur-3xl" style={{ backgroundColor: activeDiscipline.color }} />
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-3 mb-2">
+              <Badge variant="outline" className="font-mono border-primary/20 text-primary/80">
+                {activeDiscipline.category === "Athletic" ? "ATLETISCH" : "MARTIAAL"}
+              </Badge>
+              <Badge variant="outline" className={cn("font-mono border", health.bg, health.color)}>
+                <health.icon className="w-3 h-3 mr-1" />{health.label}
+              </Badge>
+            </div>
+            <CardTitle className="text-3xl font-bold">{activeDiscipline.name}</CardTitle>
+            <CardDescription className="text-base mt-2 max-w-lg">{activeDiscipline.description}</CardDescription>
+          </CardHeader>
+          <CardContent className="mt-4 space-y-8">
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">{activeDiscipline.plainExplanation}</p>
+                  <p className="text-sm text-muted-foreground"><strong>Voorbeeld:</strong> {activeDiscipline.example}</p>
+                  <p className="text-sm text-muted-foreground"><strong>Risico:</strong> <span className={health.color}>{activeDiscipline.risk}</span></p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <h4 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest">De Meters</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm"><span className="font-medium">Omega — Snelheid</span><span className="font-mono text-muted-foreground">{activeDiscipline.omega}%</span></div>
+                <Progress value={activeDiscipline.omega} className="h-3 bg-muted/50" indicatorClassName="bg-cyan-500" />
+                <p className="text-xs text-muted-foreground">Hoe snel volgen besluiten en acties elkaar op?</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm"><span className="font-medium">Tau — Draagkracht</span><span className="font-mono text-muted-foreground">{activeDiscipline.tau}%</span></div>
+                <Progress value={activeDiscipline.tau} className="h-3 bg-muted/50" indicatorClassName="bg-purple-500" />
+                <p className="text-xs text-muted-foreground">Hoeveel kan het team aan?</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm"><span className="font-medium">Herstel nodig</span><span className="font-mono text-muted-foreground">{activeDiscipline.recovery}%</span></div>
+                <Progress value={activeDiscipline.recovery} className="h-3 bg-muted/50" indicatorClassName="bg-amber-500" />
+                <p className="text-xs text-muted-foreground">100% = volledig stoppen na deze activiteit.</p>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-3">Verloop — Snelheid (cyaan) vs. Draagkracht (paars)</h4>
+              <div className="h-[220px] w-full bg-background/30 rounded-lg border border-border/30 p-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="soloOmega" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(190, 80%, 60%)" stopOpacity={0.3}/><stop offset="95%" stopColor="hsl(190, 80%, 60%)" stopOpacity={0}/></linearGradient>
+                      <linearGradient id="soloTau" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(280, 60%, 60%)" stopOpacity={0.2}/><stop offset="95%" stopColor="hsl(280, 60%, 60%)" stopOpacity={0}/></linearGradient>
+                    </defs>
+                    <XAxis dataKey="time" hide /><YAxis hide domain={[0, 110]} />
+                    <Tooltip contentStyle={{ backgroundColor: '#111', borderColor: '#333', fontFamily: 'monospace', fontSize: 12 }} formatter={(value: number, name: string) => [`${value}%`, name === 'omega' ? 'Snelheid (ω)' : 'Draagkracht (τ)']} />
+                    <Area type="monotone" dataKey="omega" stroke="hsl(190, 80%, 60%)" fillOpacity={1} fill="url(#soloOmega)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="tau" stroke="hsl(280, 60%, 60%)" fillOpacity={1} fill="url(#soloTau)" strokeWidth={2} strokeDasharray="6 3" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {activeDiscipline.omega > activeDiscipline.tau 
+                  ? "⚠️ Snelheid is hoger dan Draagkracht. Dit systeem is overbelast." 
+                  : "✓ Draagkracht is hoger dan Snelheid. Dit systeem is in balans."}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+export default function OlympiaPage() {
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="border-b border-border/40 pb-6">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-          <div className="p-2 bg-primary/20 text-primary rounded-lg">
-            <Activity className="w-6 h-6" />
-          </div>
+          <div className="p-2 bg-primary/20 text-primary rounded-lg"><Activity className="w-6 h-6" /></div>
           OLYMPIA Decathlon
         </h1>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Elke organisatie beweegt. Maar <strong className="text-foreground">hoe</strong> beweegt ze? 
-          Sprint ze (snel maar uitputtend) of loopt ze een marathon (rustig en duurzaam)? 
-          Kies hieronder een modus om te zien wat de <em>kosten</em> zijn.
+          Organisaties bewegen als <strong className="text-foreground">vliegwielen</strong>. 
+          Ze draaien elk op hun eigen frequentie. Wanneer twee wielen in elkaar haken, 
+          bepaalt de <em>overdrachtsratio</em> of ze samen resoneren — of elkaar kapot maken.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* LEFT: Discipline Selector */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          <div>
-            <h3 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-1 pl-1">
-              Atletisch
-            </h3>
-            <p className="text-xs text-muted-foreground mb-3 pl-1">Hoe hard en hoe lang beweegt de organisatie?</p>
-            <div className="space-y-1">
-              {DISCIPLINES.filter(d => d.category === "Athletic").map(d => (
-                <button
-                  key={d.id}
-                  data-testid={`button-discipline-${d.id}`}
-                  onClick={() => setSelectedId(d.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 p-3 rounded-md text-left transition-all border",
-                    selectedId === d.id 
-                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_15px_rgba(6,182,212,0.15)]" 
-                      : "bg-card/30 border-transparent hover:bg-card/80 hover:border-border text-muted-foreground"
-                  )}
-                >
-                  <d.icon className="w-5 h-5 opacity-70" />
-                  <div className="flex-1">
-                    <span className="font-medium text-sm">{d.name}</span>
-                    <p className="text-xs opacity-60 mt-0.5">{d.plainExplanation}</p>
-                  </div>
-                  {selectedId === d.id && (
-                    <motion.div layoutId="active-dot" className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
+      <Tabs defaultValue="coupling" className="w-full">
+        <TabsList className="bg-card/50 border border-border/50">
+          <TabsTrigger value="coupling" className="gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary" data-testid="tab-coupling">
+            <Link2 className="w-4 h-4" /> Koppeling (Vliegwielen)
+          </TabsTrigger>
+          <TabsTrigger value="solo" className="gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary" data-testid="tab-solo">
+            <Activity className="w-4 h-4" /> Solo (Discipline)
+          </TabsTrigger>
+        </TabsList>
 
-          <div>
-            <h3 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-1 pl-1">
-              Martiaal / Vloeiend
-            </h3>
-            <p className="text-xs text-muted-foreground mb-3 pl-1">Hoe gaat de organisatie om met weerstand en conflict?</p>
-            <div className="space-y-1">
-              {DISCIPLINES.filter(d => d.category === "Martial").map(d => (
-                <button
-                  key={d.id}
-                  data-testid={`button-discipline-${d.id}`}
-                  onClick={() => setSelectedId(d.id)}
-                  className={cn(
-                    "w-full flex items-center gap-3 p-3 rounded-md text-left transition-all border",
-                    selectedId === d.id 
-                      ? "bg-primary/10 border-primary/30 text-primary shadow-[0_0_15px_rgba(6,182,212,0.15)]" 
-                      : "bg-card/30 border-transparent hover:bg-card/80 hover:border-border text-muted-foreground"
-                  )}
-                >
-                  <d.icon className="w-5 h-5 opacity-70" />
-                  <div className="flex-1">
-                    <span className="font-medium text-sm">{d.name}</span>
-                    <p className="text-xs opacity-60 mt-0.5">{d.plainExplanation}</p>
-                  </div>
-                  {selectedId === d.id && (
-                    <motion.div layoutId="active-dot" className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
+        <TabsContent value="coupling" className="mt-6">
+          <CouplingView />
+        </TabsContent>
 
-        </div>
-
-        {/* RIGHT: Detail Panel */}
-        <div className="lg:col-span-8 space-y-6">
-          
-          {/* Main Card */}
-          <Card className="bg-card/50 backdrop-blur-md border-border/50 overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-32 opacity-5 pointer-events-none rounded-full blur-3xl" style={{ backgroundColor: activeDiscipline.color }} />
-            
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start flex-wrap gap-4">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <Badge variant="outline" className="font-mono border-primary/20 text-primary/80">
-                      {activeDiscipline.category === "Athletic" ? "ATLETISCH" : "MARTIAAL"}
-                    </Badge>
-                    <Badge variant="outline" className={cn("font-mono border", health.bg, health.color)}>
-                      <health.icon className="w-3 h-3 mr-1" />
-                      {health.label}
-                    </Badge>
-                  </div>
-                  <CardTitle className="text-3xl font-bold">{activeDiscipline.name}</CardTitle>
-                  <CardDescription className="text-base mt-2 max-w-lg">
-                    {activeDiscipline.description}
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            
-            <CardContent className="mt-4 space-y-8">
-              
-              {/* Plain Language Explanation */}
-              <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
-                <div className="flex items-start gap-3">
-                  <Info className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-foreground">{activeDiscipline.plainExplanation}</p>
-                    <p className="text-sm text-muted-foreground"><strong>Voorbeeld:</strong> {activeDiscipline.example}</p>
-                    <p className="text-sm text-muted-foreground"><strong>Risico:</strong> <span className={health.color}>{activeDiscipline.risk}</span></p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Meters with Labels */}
-              <div className="space-y-6">
-                <h4 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest">De Meters</h4>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Omega — Snelheid</span>
-                    <span className="font-mono text-muted-foreground">{activeDiscipline.omega}%</span>
-                  </div>
-                  <Progress value={activeDiscipline.omega} className="h-3 bg-muted/50" indicatorClassName="bg-cyan-500" />
-                  <p className="text-xs text-muted-foreground">Hoe snel volgen besluiten en acties elkaar op? Hoe hoger, hoe meer druk.</p>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Tau — Draagkracht</span>
-                    <span className="font-mono text-muted-foreground">{activeDiscipline.tau}%</span>
-                  </div>
-                  <Progress value={activeDiscipline.tau} className="h-3 bg-muted/50" indicatorClassName="bg-purple-500" />
-                  <p className="text-xs text-muted-foreground">Hoeveel kan het team aan? Hoe lager, hoe kwetsbaarder het systeem.</p>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">Herstel nodig na afloop</span>
-                    <span className="font-mono text-muted-foreground">{activeDiscipline.recovery}%</span>
-                  </div>
-                  <Progress value={activeDiscipline.recovery} className="h-3 bg-muted/50" indicatorClassName="bg-amber-500" />
-                  <p className="text-xs text-muted-foreground">Hoeveel rust is er nodig? 100% = je moet volledig stoppen na deze activiteit.</p>
-                </div>
-              </div>
-
-              {/* Chart */}
-              <div>
-                <h4 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-3">
-                  Verloop over tijd — Snelheid (cyaan) vs. Draagkracht (paars)
-                </h4>
-                <div className="h-[250px] w-full bg-background/30 rounded-lg border border-border/30 p-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="colorOmega" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(190, 80%, 60%)" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="hsl(190, 80%, 60%)" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorTau" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(280, 60%, 60%)" stopOpacity={0.2}/>
-                          <stop offset="95%" stopColor="hsl(280, 60%, 60%)" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="time" hide />
-                      <YAxis hide domain={[0, 110]} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#111', borderColor: '#333', fontFamily: 'monospace', fontSize: 12 }}
-                        formatter={(value: number, name: string) => [
-                          `${value}%`, 
-                          name === 'omega' ? 'Snelheid (ω)' : 'Draagkracht (τ)'
-                        ]}
-                      />
-                      <Area type="monotone" dataKey="omega" stroke="hsl(190, 80%, 60%)" fillOpacity={1} fill="url(#colorOmega)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="tau" stroke="hsl(280, 60%, 60%)" fillOpacity={1} fill="url(#colorTau)" strokeWidth={2} strokeDasharray="6 3" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {activeDiscipline.omega > activeDiscipline.tau 
-                    ? "⚠️ Snelheid (cyaan) is hoger dan Draagkracht (paars). Dit systeem is overbelast." 
-                    : "✓ Draagkracht (paars) is hoger dan Snelheid (cyaan). Dit systeem is in balans."}
-                </p>
-              </div>
-
-            </CardContent>
-          </Card>
-
-          {/* Bottom Insight Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="bg-card/30 border-border/30">
-              <CardHeader className="py-4">
-                <CardTitle className="text-sm font-mono text-muted-foreground">KERNVRAAG</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-foreground leading-relaxed">
-                  {activeDiscipline.omega > activeDiscipline.tau
-                    ? "\"We gaan te hard. Wat moeten we loslaten of vertragen?\""
-                    : activeDiscipline.recovery > 60
-                    ? "\"We hebben het volgehouden, maar we moeten nu echt rust nemen.\""
-                    : "\"Dit tempo is houdbaar. Hoe houden we dit vol?\""}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className={cn("border", health.bg)}>
-              <CardHeader className="py-4">
-                <CardTitle className="text-sm font-mono text-muted-foreground">CONSTRAINT (O36)</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-foreground font-mono mb-2">ω ≤ f(τ - σ_ext)</p>
-                <p className="text-xs text-muted-foreground">
-                  {activeDiscipline.omega > activeDiscipline.tau
-                    ? "Snelheid overstijgt draagkracht. Systeembreuk dreigt."
-                    : "Snelheid blijft binnen draagkracht. Systeem is stabiel."}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-        </div>
-      </div>
+        <TabsContent value="solo" className="mt-6">
+          <SoloView />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
