@@ -14,7 +14,7 @@
 ### Modules
 - **ARGOS (TaoGate)** — Pre-governance classification. Dynamically loads classification rules from the active Scope. Categories, keywords, and escalation paths are all scope-defined.
 - **SCOPES** — Organizational scope management. Each scope defines classification categories (with PASS/BLOCK status, escalation targets, keywords) and organizational documents (visiedocumenten, mandaten, huisregels, protocollen). Scopes are the key to every organization.
-- **OLYMPIA (Decathlon)** — Flywheel coupling visualization. Shows how two organizations/departments interact through speed selection and coupling mechanism.
+- **OLYMPIA (Rule Execution Layer)** — Jurisdictional rule conflict resolution. 4 layers (EU → NATIONAL → REGIONAL → MUNICIPAL) with priority mechanics. BLOCK wint altijd. Hogere jurisdictie wint bij conflict. Rules stored as JSONB in scopes. Regeldruk = Σ (laag_prioriteit × impact). Server-side resolution via `/api/olympia/resolve`.
 
 The application also includes a Protocol Manual page, a Lexicon page, and a printable/downloadable README page.
 
@@ -53,6 +53,7 @@ Preferred communication style: Simple, everyday language.
 - `POST /api/scopes` — Create a new scope (validated with Zod)
 - `PUT /api/scopes/:id` — Update a scope
 - `DELETE /api/scopes/:id` — Delete a scope
+- `POST /api/olympia/resolve` — Resolve rule conflicts across jurisdictional layers (accepts scopeId, optional domain/category)
 
 ### Data Storage
 - **Database**: PostgreSQL
@@ -60,7 +61,7 @@ Preferred communication style: Simple, everyday language.
 - **Connection**: `node-postgres` (pg) pool via `DATABASE_URL` environment variable
 - **Schema**: Two tables:
   - `observations`: `id` (UUID), `text`, `status` (PASS/BLOCK), `category`, `escalation`, `context` (default "IC"), `scopeId`, `createdAt`
-  - `scopes`: `id` (UUID), `name`, `description`, `categories` (JSONB — array of {name, label, status, escalation, keywords[], color}), `documents` (JSONB — array of {type, title, content}), `isDefault`, `createdAt`, `updatedAt`
+  - `scopes`: `id` (UUID), `name`, `description`, `categories` (JSONB), `documents` (JSONB), `rules` (JSONB — array of {ruleId, layer, domain, title, description, action, overridesLowerLayers, source?, article?}), `isDefault`, `createdAt`, `updatedAt`
 - **Migrations**: Managed via `drizzle-kit push` (schema-push approach, not migration files)
 - **Seed**: Default IC scope seeded on first startup (`server/seed.ts`)
 
@@ -74,7 +75,7 @@ Preferred communication style: Simple, everyday language.
 ### Pages
 - `/` — ARGOS TaoGate (Atelier Argos — pre-governance classification)
 - `/scopes` — SCOPES (organizational scope management — categories, keywords, escalation, documents)
-- `/olympia` — OLYMPIA Decathlon (flywheel coupling visualization)
+- `/olympia` — OLYMPIA Rule Execution Layer (jurisdictional rule conflict resolution across 4 layers: EU, NATIONAL, REGIONAL, MUNICIPAL)
 - `/lexicon` — ORFHEUSS Lexicon (grondcyclus, ateliers, axioma's, ethiek)
 - `/manual` — Protocol Manual
 - `/readme` — Downloadable PDF guide

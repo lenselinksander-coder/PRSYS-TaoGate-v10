@@ -21,6 +21,22 @@ export const scopeDocumentSchema = z.object({
   content: z.string(),
 });
 
+export const ruleLayers = ["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"] as const;
+export type RuleLayer = typeof ruleLayers[number];
+
+export const scopeRuleSchema = z.object({
+  ruleId: z.string(),
+  layer: z.enum(ruleLayers),
+  domain: z.string(),
+  title: z.string(),
+  description: z.string(),
+  action: z.enum(gateDecisions),
+  overridesLowerLayers: z.boolean().default(true),
+  source: z.string().optional(),
+  article: z.string().optional(),
+});
+
+export type ScopeRule = z.infer<typeof scopeRuleSchema>;
 export type ScopeCategory = z.infer<typeof scopeCategorySchema>;
 export type ScopeDocument = z.infer<typeof scopeDocumentSchema>;
 
@@ -30,6 +46,7 @@ export const scopes = pgTable("scopes", {
   description: text("description"),
   categories: jsonb("categories").notNull().$type<ScopeCategory[]>(),
   documents: jsonb("documents").notNull().$type<ScopeDocument[]>().default([]),
+  rules: jsonb("rules").notNull().$type<ScopeRule[]>().default([]),
   isDefault: text("is_default").default("false"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -38,6 +55,7 @@ export const scopes = pgTable("scopes", {
 export const insertScopeSchema = createInsertSchema(scopes, {
   categories: z.array(scopeCategorySchema),
   documents: z.array(scopeDocumentSchema).optional(),
+  rules: z.array(scopeRuleSchema).optional(),
 }).omit({
   id: true,
   createdAt: true,

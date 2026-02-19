@@ -74,6 +74,16 @@ export async function deleteScope(id: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete scope");
 }
 
+export async function resolveOlympia(scopeId: string, domain?: string, category?: string) {
+  const res = await fetch("/api/olympia/resolve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scopeId, domain, category }),
+  });
+  if (!res.ok) throw new Error("Failed to resolve rules");
+  return res.json();
+}
+
 export async function classifyText(text: string, scopeId: string): Promise<{ status: string; category: string; escalation: string | null }> {
   const res = await fetch("/api/classify", {
     method: "POST",

@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertObservationSchema, insertScopeSchema } from "@shared/schema";
-import type { Scope, GateDecision } from "@shared/schema";
+import { insertObservationSchema, insertScopeSchema, ruleLayers } from "@shared/schema";
+import type { Scope, GateDecision, ScopeRule, RuleLayer } from "@shared/schema";
+import { z } from "zod";
 
 function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null } {
   const lower = text.toLowerCase();
@@ -40,6 +41,101 @@ export async function registerRoutes(
 
     const result = classifyWithScope(text, scope);
     return res.json(result);
+  });
+
+  const resolveInputSchema = z.object({
+    scopeId: z.string(),
+    domain: z.string().optional(),
+    category: z.string().optional(),
+  });
+
+  app.post("/api/olympia/resolve", async (req, res) => {
+    const parsed = resolveInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    const { scopeId, domain, category } = parsed.data;
+
+    const scope = await storage.getScope(scopeId);
+    if (!scope) return res.status(404).json({ error: "Scope not found" });
+
+    const rules = (scope.rules || []) as ScopeRule[];
+    let applicable = rules;
+    if (domain) {
+      applicable = applicable.filter(r => r.domain === domain);
+    }
+    if (category) {
+      applicable = applicable.filter(r =>
+        r.ruleId.toLowerCase().includes(category.toLowerCase()) ||
+        r.title.toLowerCase().includes(category.toLowerCase()) ||
+        r.domain.toLowerCase().includes(category.toLowerCase())
+      );
+    }
+
+    const priorityIndex = (layer: RuleLayer) => ruleLayers.indexOf(layer);
+    const actionSeverity = (action: string) => {
+      const order: Record<string, number> = { BLOCK: 5, ESCALATE_REGULATORY: 4, ESCALATE_HUMAN: 3, PASS_WITH_TRANSPARENCY: 2, PASS: 1 };
+      return order[action] || 0;
+    };
+    const sorted = [...applicable].sort((a, b) => priorityIndex(a.layer) - priorityIndex(b.layer) || actionSeverity(b.action) - actionSeverity(a.action));
+
+    let winningRule: ScopeRule | null = null;
+    for (const layer of ruleLayers) {
+      const layerRules = sorted.filter(r => r.layer === layer);
+      if (layerRules.length === 0) continue;
+
+      const layerBlock = layerRules.find(r => r.action === "BLOCK");
+      if (layerBlock) {
+        winningRule = layerBlock;
+        break;
+      }
+
+      const overriding = layerRules.filter(r => r.overridesLowerLayers);
+      if (overriding.length > 0) {
+        winningRule = overriding[0];
+        break;
+      }
+
+      if (!winningRule) {
+        winningRule = layerRules[0];
+      }
+    }
+
+    if (!winningRule && sorted.length > 0) {
+      winningRule = sorted[0];
+    }
+
+    const layerSummary = ruleLayers.map(layer => {
+      const layerRules = sorted.filter(r => r.layer === layer);
+      return {
+        layer,
+        priority: priorityIndex(layer) + 1,
+        ruleCount: layerRules.length,
+        rules: layerRules,
+        dominantAction: layerRules[0]?.action || null,
+      };
+    });
+
+    const hasConflict = (() => {
+      const actions = new Set(sorted.map(r => r.action));
+      return actions.size > 1;
+    })();
+
+    const pressure = sorted.reduce((acc, r, _i) => {
+      if (r.action === "BLOCK") return Infinity;
+      const layerWeight = 4 - priorityIndex(r.layer);
+      const actionWeight = actionSeverity(r.action);
+      return acc + layerWeight * actionWeight;
+    }, 0);
+
+    return res.json({
+      winningRule,
+      hasConflict,
+      pressure: pressure === Infinity ? "INFINITE" : pressure,
+      layers: layerSummary,
+      applicableRules: sorted,
+      totalRules: rules.length,
+    });
   });
 
   app.post("/api/observations", async (req, res) => {
