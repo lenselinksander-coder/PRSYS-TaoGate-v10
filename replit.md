@@ -1,11 +1,19 @@
-# ORFHEUSS | OLYMPIA Console
+# ORFHEUSS | PRSYS Console
 
 ## Overview
 
-ORFHEUSS is a specialized organizational governance console built for clinical/medical environments (primarily ICU/Intensive Care contexts). It functions as a "mechanical canon" for measuring and bounding organizational pressure and movement. The system has two primary modules:
+**ORFHEUSS** is the outer shell — a governance console for clinical/medical environments (primarily ICU/Intensive Care). Inside runs **PRSYS** (Paontologisch Resonantie Systeem), an ontological model for organizational movement built on **Paontologie**: the intersection of Merleau-Ponty (the body as knowledge) and Tao (the way, the flow).
 
-- **ARGOS (TaoGate)** — A gatekeeper that classifies input as either safe observations (PASS) or interventions requiring authorization (BLOCK). It auto-categorizes text into Observation, Intervention, Allocatie, or Command.
-- **OLYMPIA (Decathlon)** — A monitoring dashboard that visualizes organizational "cost of movement" using mechanical metaphors (Speed/Omega vs. Carrying Capacity/Tau) across different operational disciplines (Sprint, Estafette, etc.).
+### Core Concept: Paontologie
+- Organizations are **flywheels** that interlock. Frequency = vibration = pressure (F-druk).
+- **5 Snelheden** (Speed disciplines: Sprint, Estafette, Horden, Marathon, Triathlon) determine how fast each flywheel spins.
+- **5 Koppelingen** (Coupling disciplines: Worstelen, Turks Worstelen, Aikido, Yoga, Capoeira) determine how flywheels connect — along a **West↔Oost** axis (direct grip vs. redirection/leverage).
+- When coupling fails, **Silent Violence** occurs: invisible damage that nobody names but everyone feels.
+- The overdrachtsratio (i = ω₁/ω₂) determines resonance vs. destruction.
+
+### Two Modules
+- **ARGOS (TaoGate)** — Pre-governance classification. Classifies input as safe observations (PASS) or interventions requiring authorization (BLOCK). Auto-categorizes into Observation, Intervention, Allocatie, or Command.
+- **OLYMPIA (Decathlon)** — Flywheel coupling visualization. Shows how two organizations/departments interact through speed selection and coupling mechanism. Hospital department examples (SEH, IC, Radiologie, etc.) make it concrete.
 
 The application also includes a Protocol Manual page and a printable/downloadable README page.
 

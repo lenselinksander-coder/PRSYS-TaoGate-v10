@@ -30,7 +30,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center border border-primary/20">
             <ShieldAlert className="w-5 h-5 text-primary" />
           </div>
-          <span className="font-mono font-bold tracking-tight text-lg">ORFHEUSS <span className="text-muted-foreground font-normal">| CONSOLE</span></span>
+          <div className="flex flex-col leading-tight">
+            <span className="font-mono font-bold tracking-tight text-lg">ORFHEUSS <span className="text-muted-foreground font-normal">| CONSOLE</span></span>
+            <span className="text-[9px] font-mono text-muted-foreground/60 tracking-widest">PRSYS — Paontologisch Resonantie Systeem</span>
+          </div>
         </div>
 
         <nav className="hidden md:flex items-center gap-1">

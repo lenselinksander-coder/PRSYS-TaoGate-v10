@@ -475,10 +475,11 @@ export default function OlympiaPage() {
           <div className="p-2 bg-primary/20 text-primary rounded-lg"><Activity className="w-6 h-6" /></div>
           OLYMPIA Decathlon
         </h1>
+        <p className="text-xs font-mono text-primary/60 mt-1">PRSYS — Paontologisch Resonantie Systeem</p>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Een ontologisch model voor organisatorische beweging. 
-          <strong className="text-foreground"> 5 Snelheden</strong> (hoe hard draait elk vliegwiel) en 
-          <strong className="text-foreground"> 5 Koppelingen</strong> (hoe haken ze in elkaar — van Westerse grip tot Oosterse hefboom). 
+          Gebouwd op <strong className="text-foreground">Paontologie</strong> — de kruising van Merleau-Ponty (het lichaam als kennis) 
+          en Tao (de weg, de stroom). <strong className="text-foreground">5 Snelheden</strong> bepalen hoe hard elk vliegwiel draait. 
+          <strong className="text-foreground"> 5 Koppelingen</strong> bepalen hoe ze in elkaar haken — van Westerse grip tot Oosterse hefboom.
           Wanneer de koppeling niet klopt, ontstaat <em className="text-red-400">Silent Violence</em>: onzichtbare schade die niemand benoemt maar iedereen voelt.
         </p>
       </div>
