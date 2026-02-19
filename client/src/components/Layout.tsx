@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Eye, Activity, ShieldAlert, FileText, Menu, X, Zap, Scale, Radio } from "lucide-react";
+import { Eye, Activity, ShieldAlert, FileText, Menu, X, Zap, Scale, Radio, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -11,7 +11,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { name: "ARGOS (TaoGate)", path: "/", icon: Eye },
     { name: "OLYMPIA (Decathlon)", path: "/olympia", icon: Activity },
-    { name: "ORFHEUSS (Canon)", path: "/canon", icon: FileText },
+    { name: "PROTOCOL (Manual)", path: "/manual", icon: Info },
   ];
 
   return (
