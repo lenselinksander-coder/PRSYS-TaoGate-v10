@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, FileText, Tag, Trash2, Save, ChevronDown, ChevronRight, Edit2, Shield, CheckCircle, BookOpen, ScrollText, Scale, FolderOpen } from "lucide-react";
+import { Layers, Plus, FileText, Tag, Trash2, Save, ChevronDown, ChevronRight, Edit2, Shield, CheckCircle, BookOpen, ScrollText, Scale, FolderOpen, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,25 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchScopes, createScope, updateScope, deleteScope } from "@/lib/api";
 import type { Scope, ScopeCategory, ScopeDocument } from "@shared/schema";
+
+const DECISION_STYLE: Record<string, { color: string; variant: "secondary" | "destructive" | "outline"; icon: "check" | "info" | "alert" | "shield" }> = {
+  PASS: { color: "text-green-500", variant: "secondary", icon: "check" },
+  PASS_WITH_TRANSPARENCY: { color: "text-blue-400", variant: "outline", icon: "info" },
+  ESCALATE_HUMAN: { color: "text-orange-400", variant: "outline", icon: "alert" },
+  ESCALATE_REGULATORY: { color: "text-amber-500", variant: "outline", icon: "alert" },
+  BLOCK: { color: "text-red-500", variant: "destructive", icon: "shield" },
+};
+
+function StatusIcon({ status, className }: { status: string; className?: string }) {
+  const style = DECISION_STYLE[status] || DECISION_STYLE["PASS"];
+  const cn = `${className || ""} ${style.color}`;
+  switch (style.icon) {
+    case "check": return <CheckCircle className={cn} />;
+    case "info": return <Info className={cn} />;
+    case "alert": return <AlertTriangle className={cn} />;
+    case "shield": return <Shield className={cn} />;
+  }
+}
 
 const DOC_TYPE_LABELS: Record<string, { label: string; icon: typeof FileText }> = {
   visiedocument: { label: "Visiedocument", icon: BookOpen },
@@ -202,13 +221,9 @@ function ScopeEditor({ scope, onClose }: { scope?: Scope; onClose: () => void })
               >
                 <div className="flex items-center gap-3">
                   {expandedCat === i ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                  {cat.status === "PASS" ? (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                  ) : (
-                    <Shield className="w-4 h-4 text-red-400" />
-                  )}
+                  <StatusIcon status={cat.status} className="w-4 h-4" />
                   <span className="font-mono text-sm font-semibold">{cat.label || cat.name || `Categorie ${i + 1}`}</span>
-                  <Badge variant={cat.status === "PASS" ? "secondary" : "destructive"} className="text-[10px]">{cat.status}</Badge>
+                  <Badge variant={(DECISION_STYLE[cat.status] || DECISION_STYLE["PASS"]).variant} className="text-[10px]">{cat.status}</Badge>
                   {cat.escalation && <span className="text-[10px] font-mono text-muted-foreground">→ {cat.escalation}</span>}
                   <span className="text-[10px] text-muted-foreground">{cat.keywords.length} trefwoorden</span>
                 </div>
@@ -249,16 +264,19 @@ function ScopeEditor({ scope, onClose }: { scope?: Scope; onClose: () => void })
                           <label className="text-[10px] font-mono text-muted-foreground uppercase mb-1 block">Status</label>
                           <select 
                             value={cat.status} 
-                            onChange={e => updateCategory(i, { status: e.target.value as "PASS" | "BLOCK" })}
+                            onChange={e => updateCategory(i, { status: e.target.value as any })}
                             className="w-full h-8 rounded-md border border-input bg-background px-3 text-sm font-mono"
                           >
                             <option value="PASS">PASS — doorlaten</option>
-                            <option value="BLOCK">BLOCK — escaleren</option>
+                            <option value="PASS_WITH_TRANSPARENCY">PASS + TRANSPARANTIE</option>
+                            <option value="ESCALATE_HUMAN">ESCALATIE — menselijk mandaat</option>
+                            <option value="ESCALATE_REGULATORY">ESCALATIE — toezichthouder</option>
+                            <option value="BLOCK">BLOCK — verboden</option>
                           </select>
                         </div>
                       </div>
 
-                      {cat.status === "BLOCK" && (
+                      {cat.status !== "PASS" && (
                         <div>
                           <label className="text-[10px] font-mono text-muted-foreground uppercase mb-1 block">Escalatie naar</label>
                           <Input 
@@ -445,11 +463,7 @@ function ScopeCard({ scope, onEdit }: { scope: Scope; onEdit: (scope: Scope) => 
           <div className="flex flex-wrap gap-1.5 mb-3">
             {scope.categories.map((cat, i) => (
               <div key={i} className="flex items-center gap-1.5 text-[10px] font-mono bg-muted/40 px-2 py-1 rounded">
-                {cat.status === "PASS" ? (
-                  <CheckCircle className="w-3 h-3 text-green-500" />
-                ) : (
-                  <Shield className="w-3 h-3 text-red-400" />
-                )}
+                <StatusIcon status={cat.status} className="w-3 h-3" />
                 <span>{cat.label || cat.name}</span>
                 {cat.escalation && <span className="text-muted-foreground">→ {cat.escalation}</span>}
                 <span className="text-muted-foreground/50">({cat.keywords.length})</span>

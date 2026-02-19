@@ -5,7 +5,7 @@ import { desc, eq, sql } from "drizzle-orm";
 export interface IStorage {
   createObservation(observation: InsertObservation): Promise<Observation>;
   getObservations(context?: string, scopeId?: string): Promise<Observation[]>;
-  getStats(context?: string, scopeId?: string): Promise<{ total: number; passed: number; blocked: number }>;
+  getStats(context?: string, scopeId?: string): Promise<{ total: number; passed: number; transparency: number; escalated: number; blocked: number }>;
 
   createScope(scope: InsertScope): Promise<Scope>;
   getScopes(): Promise<Scope[]>;
@@ -31,11 +31,13 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(observations).orderBy(desc(observations.createdAt)).limit(100);
   }
 
-  async getStats(context?: string, scopeId?: string): Promise<{ total: number; passed: number; blocked: number }> {
+  async getStats(context?: string, scopeId?: string): Promise<{ total: number; passed: number; transparency: number; escalated: number; blocked: number }> {
     const all = await this.getObservations(context, scopeId);
     return {
       total: all.length,
       passed: all.filter(o => o.status === "PASS").length,
+      transparency: all.filter(o => o.status === "PASS_WITH_TRANSPARENCY").length,
+      escalated: all.filter(o => o.status === "ESCALATE_HUMAN" || o.status === "ESCALATE_REGULATORY").length,
       blocked: all.filter(o => o.status === "BLOCK").length,
     };
   }

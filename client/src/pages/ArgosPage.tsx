@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, Shield, CheckCircle, Terminal, BarChart2, Eye, Layers, Plus } from "lucide-react";
+import { Activity, Shield, CheckCircle, Terminal, BarChart2, Eye, Layers, Plus, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,32 +9,104 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
 import { fetchObservations, fetchStats, createObservation, fetchScopes } from "@/lib/api";
-import type { Scope, ScopeCategory } from "@shared/schema";
+import type { Scope, GateDecision } from "@shared/schema";
 
-function classifyWithScope(text: string, scope: Scope): { status: "PASS" | "BLOCK"; category: string; escalation: string | null } {
+const DECISION_CONFIG: Record<string, { label: string; shortLabel: string; color: string; bg: string; border: string; dot: string; icon: "check" | "info" | "alert" | "shield"; gateText: string }> = {
+  PASS: {
+    label: "PASS",
+    shortLabel: "PASS",
+    color: "text-green-500",
+    bg: "bg-green-500/5",
+    border: "border-green-500/10",
+    dot: "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]",
+    icon: "check",
+    gateText: "PASS — Geen escalatie",
+  },
+  PASS_WITH_TRANSPARENCY: {
+    label: "PASS + TRANSPARANTIE",
+    shortLabel: "TRANSPARENCY",
+    color: "text-blue-400",
+    bg: "bg-blue-400/5",
+    border: "border-blue-400/10",
+    dot: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.5)]",
+    icon: "info",
+    gateText: "PASS — Transparantieverplichting",
+  },
+  ESCALATE_HUMAN: {
+    label: "ESCALATIE MENS",
+    shortLabel: "ESCALATE",
+    color: "text-orange-400",
+    bg: "bg-orange-400/5",
+    border: "border-orange-400/10",
+    dot: "bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]",
+    icon: "alert",
+    gateText: "ESCALATE — Menselijk mandaat vereist",
+  },
+  ESCALATE_REGULATORY: {
+    label: "ESCALATIE TOEZICHT",
+    shortLabel: "REGULATORY",
+    color: "text-amber-500",
+    bg: "bg-amber-500/5",
+    border: "border-amber-500/10",
+    dot: "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]",
+    icon: "alert",
+    gateText: "ESCALATE — Regulatoir toezicht vereist",
+  },
+  BLOCK: {
+    label: "BLOCK",
+    shortLabel: "BLOCK",
+    color: "text-red-500",
+    bg: "bg-red-500/5",
+    border: "border-red-500/10",
+    dot: "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]",
+    icon: "shield",
+    gateText: "BLOCK — Verboden",
+  },
+};
+
+function getDecisionConfig(status: string) {
+  return DECISION_CONFIG[status] || DECISION_CONFIG["PASS"];
+}
+
+function DecisionIcon({ status, className }: { status: string; className?: string }) {
+  const config = getDecisionConfig(status);
+  const cn = `${className || ""} ${config.color}`;
+  switch (config.icon) {
+    case "check": return <CheckCircle className={cn} />;
+    case "info": return <Info className={cn} />;
+    case "alert": return <AlertTriangle className={cn} />;
+    case "shield": return <Shield className={cn} />;
+  }
+}
+
+function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null } {
   const lower = text.toLowerCase();
-  
-  const blockCategories = scope.categories.filter(c => c.status === "BLOCK");
-  for (const cat of blockCategories) {
-    if (cat.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
-      return { status: "BLOCK", category: cat.name, escalation: cat.escalation };
+
+  const priorityOrder: GateDecision[] = ["BLOCK", "ESCALATE_REGULATORY", "ESCALATE_HUMAN", "PASS_WITH_TRANSPARENCY", "PASS"];
+
+  for (const decision of priorityOrder) {
+    const cats = scope.categories.filter(c => c.status === decision);
+    for (const cat of cats) {
+      if (cat.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
+        return { status: cat.status, category: cat.name, escalation: cat.escalation };
+      }
     }
   }
 
   const defaultPass = scope.categories.find(c => c.status === "PASS");
-  return { 
-    status: "PASS", 
-    category: defaultPass?.name || "Observation", 
-    escalation: null 
+  return {
+    status: "PASS",
+    category: defaultPass?.name || "Observation",
+    escalation: null,
   };
 }
 
-function buildPresets(scope: Scope): { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }[] {
-  const presets: { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }[] = [];
-  
+function buildPresets(scope: Scope): { text: string; status: string; category: string; escalation: string | null }[] {
+  const presets: { text: string; status: string; category: string; escalation: string | null }[] = [];
+
   for (const cat of scope.categories) {
     if (cat.keywords.length > 0) {
-      const sampleKeywords = cat.keywords.slice(0, 3);
+      const sampleKeywords = cat.keywords.slice(0, 2);
       for (const kw of sampleKeywords) {
         presets.push({
           text: kw.charAt(0).toUpperCase() + kw.slice(1),
@@ -83,27 +155,6 @@ function BlankState() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-30">
-        <Card className="bg-card/50 border-border/50">
-          <CardContent className="pt-6">
-            <p className="text-sm font-medium text-muted-foreground">Totaal</p>
-            <h3 className="text-3xl font-mono font-bold mt-2">—</h3>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 border-border/50">
-          <CardContent className="pt-6">
-            <p className="text-sm font-medium text-muted-foreground">PASS</p>
-            <h3 className="text-3xl font-mono font-bold mt-2">—</h3>
-          </CardContent>
-        </Card>
-        <Card className="bg-card/50 border-border/50">
-          <CardContent className="pt-6">
-            <p className="text-sm font-medium text-muted-foreground">BLOCK</p>
-            <h3 className="text-3xl font-mono font-bold mt-2">—</h3>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="text-center text-xs font-mono text-muted-foreground/40 pb-4">
         Definieer een scope → de gate, classificatie en escalatiepaden verschijnen automatisch.
       </div>
@@ -121,8 +172,8 @@ export default function ArgosPage() {
     queryFn: fetchScopes,
   });
 
-  const activeScope = selectedScopeId 
-    ? scopeList.find(s => s.id === selectedScopeId) 
+  const activeScope = selectedScopeId
+    ? scopeList.find(s => s.id === selectedScopeId)
     : scopeList.find(s => s.isDefault === "true") || scopeList[0];
 
   const activeContext = activeScope?.name || "";
@@ -134,7 +185,7 @@ export default function ArgosPage() {
     enabled: !!activeScope,
   });
 
-  const { data: stats = { total: 0, passed: 0, blocked: 0 } } = useQuery({
+  const { data: stats = { total: 0, passed: 0, transparency: 0, escalated: 0, blocked: 0 } } = useQuery({
     queryKey: ["stats", activeScope?.id || "none"],
     queryFn: () => fetchStats(activeContext, activeScope?.id),
     refetchInterval: 5000,
@@ -168,7 +219,7 @@ export default function ArgosPage() {
     });
   };
 
-  const handlePresetClick = (preset: { text: string; status: "PASS" | "BLOCK"; category: string; escalation: string | null }) => {
+  const handlePresetClick = (preset: { text: string; status: string; category: string; escalation: string | null }) => {
     mutation.mutate({
       text: preset.text,
       status: preset.status,
@@ -187,7 +238,7 @@ export default function ArgosPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border/40 pb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3" data-testid="text-page-title">
@@ -199,7 +250,7 @@ export default function ArgosPage() {
           <p className="text-xs font-mono text-primary/60 mt-0.5">Atelier Argos — Bewaakt de horizon</p>
           <p className="text-muted-foreground mt-1 font-mono text-sm">Pre-Governance — classificeer + escaleer</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {scopeList.length > 1 && (
             <select
@@ -221,37 +272,59 @@ export default function ArgosPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Totaal</p>
-                <h3 className="text-3xl font-mono font-bold mt-2" data-testid="text-stat-total">{stats.total}</h3>
+                <p className="text-xs font-medium text-muted-foreground">Totaal</p>
+                <h3 className="text-2xl font-mono font-bold mt-1" data-testid="text-stat-total">{stats.total}</h3>
               </div>
-              <BarChart2 className="w-8 h-8 text-muted-foreground/20" />
+              <BarChart2 className="w-6 h-6 text-muted-foreground/20" />
             </div>
           </CardContent>
         </Card>
         <Card className="bg-card/50 backdrop-blur-sm border-green-900/20">
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-green-500/80">PASS</p>
-                <h3 className="text-3xl font-mono font-bold mt-2 text-green-500" data-testid="text-stat-passed">{stats.passed}</h3>
+                <p className="text-xs font-medium text-green-500/80">PASS</p>
+                <h3 className="text-2xl font-mono font-bold mt-1 text-green-500" data-testid="text-stat-passed">{stats.passed}</h3>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-500/20" />
+              <CheckCircle className="w-6 h-6 text-green-500/20" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/50 backdrop-blur-sm border-blue-900/20">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-xs font-medium text-blue-400/80">TRANSP.</p>
+                <h3 className="text-2xl font-mono font-bold mt-1 text-blue-400" data-testid="text-stat-transparency">{stats.transparency}</h3>
+              </div>
+              <Info className="w-6 h-6 text-blue-400/20" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-card/50 backdrop-blur-sm border-orange-900/20">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-xs font-medium text-orange-400/80">ESCALATIE</p>
+                <h3 className="text-2xl font-mono font-bold mt-1 text-orange-400" data-testid="text-stat-escalated">{stats.escalated}</h3>
+              </div>
+              <AlertTriangle className="w-6 h-6 text-orange-400/20" />
             </div>
           </CardContent>
         </Card>
         <Card className="bg-card/50 backdrop-blur-sm border-red-900/20">
-          <CardContent className="pt-6">
+          <CardContent className="pt-5 pb-4">
             <div className="flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-destructive/80">BLOCK</p>
-                <h3 className="text-3xl font-mono font-bold mt-2 text-destructive" data-testid="text-stat-blocked">{stats.blocked}</h3>
+                <p className="text-xs font-medium text-red-500/80">BLOCK</p>
+                <h3 className="text-2xl font-mono font-bold mt-1 text-red-500" data-testid="text-stat-blocked">{stats.blocked}</h3>
               </div>
-              <Shield className="w-8 h-8 text-destructive/20" />
+              <Shield className="w-6 h-6 text-red-500/20" />
             </div>
           </CardContent>
         </Card>
@@ -259,25 +332,16 @@ export default function ArgosPage() {
 
       <Card className="bg-card/50 backdrop-blur-sm border-primary/20">
         <CardContent className="pt-6 pb-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs font-mono">
             {activeScope.categories.map((cat, i) => {
-              const isPass = cat.status === "PASS";
-              const borderColor = isPass ? "border-green-500/10" : "border-red-500/10";
-              const bgColor = isPass ? "bg-green-500/5" : "bg-red-500/5";
-              const iconColor = isPass ? "text-green-500" : "text-red-400";
-              const textColor = cat.color || iconColor;
-              
+              const config = getDecisionConfig(cat.status);
               return (
-                <div key={i} className={`flex items-center gap-2 p-2 rounded ${bgColor} border ${borderColor}`}>
-                  {isPass ? (
-                    <CheckCircle className={`w-3 h-3 ${iconColor}`} />
-                  ) : (
-                    <Shield className={`w-3 h-3 ${iconColor}`} />
-                  )}
-                  <div>
-                    <span className={`${textColor} font-semibold`}>{cat.label.toUpperCase()}</span>
-                    <span className="text-muted-foreground block">
-                      {isPass ? "→ PASS" : `→ ${cat.escalation}`}
+                <div key={i} className={`flex items-center gap-2 p-2 rounded ${config.bg} border ${config.border}`}>
+                  <DecisionIcon status={cat.status} className="w-3 h-3 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <span className={`${config.color} font-semibold block truncate`}>{cat.label.toUpperCase()}</span>
+                    <span className="text-muted-foreground block truncate">
+                      {cat.status === "PASS" ? "→ PASS" : cat.escalation ? `→ ${cat.escalation}` : `→ ${config.shortLabel}`}
                     </span>
                   </div>
                 </div>
@@ -296,11 +360,11 @@ export default function ArgosPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex gap-4">
-            <Input 
+            <Input
               data-testid="input-observation"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={`Invoer voor MC ${activeContext}...`} 
+              placeholder={`Invoer voor MC ${activeContext}...`}
               className="font-mono text-sm bg-background/50 border-primary/20 focus-visible:ring-primary/30"
             />
             <Button data-testid="button-process" type="submit" disabled={mutation.isPending} className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]">
@@ -311,7 +375,7 @@ export default function ArgosPage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
+
         {presets.length > 0 && (
           <Card className="bg-card/50 backdrop-blur-sm border-border/50 h-full">
             <CardHeader>
@@ -320,33 +384,32 @@ export default function ArgosPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {presets.map((ex, i) => (
-                <div 
-                  key={i}
-                  data-testid={`button-example-${i}`}
-                  onClick={() => handlePresetClick(ex)}
-                  className="group flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 cursor-pointer transition-all border border-transparent hover:border-primary/10"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {ex.status === "PASS" ? (
-                      <CheckCircle className="w-3.5 h-3.5 text-green-500/70 flex-shrink-0" />
-                    ) : (
-                      <Shield className="w-3.5 h-3.5 text-destructive/70 flex-shrink-0" />
-                    )}
-                    <span className="text-sm text-foreground/90 truncate">{ex.text}</span>
+              {presets.map((ex, i) => {
+                const config = getDecisionConfig(ex.status);
+                return (
+                  <div
+                    key={i}
+                    data-testid={`button-example-${i}`}
+                    onClick={() => handlePresetClick(ex)}
+                    className="group flex items-center justify-between p-2.5 rounded-md hover:bg-muted/50 cursor-pointer transition-all border border-transparent hover:border-primary/10"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <DecisionIcon status={ex.status} className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="text-sm text-foreground/90 truncate">{ex.text}</span>
+                    </div>
+                    <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
+                      <Badge className={`font-mono text-[10px] tracking-wider ${config.bg} ${config.color} border ${config.border}`}>
+                        {config.shortLabel}
+                      </Badge>
+                      {ex.escalation && (
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {ex.escalation}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
-                    <Badge variant={ex.status === "PASS" ? "secondary" : "destructive"} className="font-mono text-[10px] tracking-wider">
-                      {ex.status}
-                    </Badge>
-                    {ex.escalation && (
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        {ex.escalation}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
         )}
@@ -368,46 +431,45 @@ export default function ArgosPage() {
                     <p className="text-xs mt-1">De AI observeert en classificeert, maar beslist nooit.</p>
                   </div>
                 ) : (
-                  observations.map((obs: any) => (
-                    <motion.div
-                      key={obs.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      className="mb-4 last:mb-0"
-                    >
-                      <div className="flex gap-3 items-start p-3 rounded border border-border/40 bg-background/30">
-                        <div className="mt-0.5">
-                          {obs.status === "PASS" ? (
-                            <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-                          ) : (
-                            <div className="w-2 h-2 rounded-full bg-destructive shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-                          )}
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {new Date(obs.createdAt).toLocaleTimeString()} — ID: {obs.id.slice(0, 8)}
-                            </span>
-                            <Badge variant={obs.status === "PASS" ? "outline" : "destructive"} className="text-[10px] h-5">
-                              {categoryLabels[obs.category] || obs.category}
-                            </Badge>
+                  observations.map((obs: any) => {
+                    const config = getDecisionConfig(obs.status);
+                    return (
+                      <motion.div
+                        key={obs.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        className="mb-4 last:mb-0"
+                      >
+                        <div className="flex gap-3 items-start p-3 rounded border border-border/40 bg-background/30">
+                          <div className="mt-0.5">
+                            <div className={`w-2 h-2 rounded-full ${config.dot}`} />
                           </div>
-                          <p className="text-sm font-medium" data-testid={`text-observation-${obs.id}`}>{obs.text}</p>
-                          <div className="pt-2 flex gap-2 flex-wrap">
-                            <span className="text-[10px] font-mono bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground">
-                              TaoGate: {obs.status === "PASS" ? "PASS — Geen escalatie" : "BLOCK"}
-                            </span>
-                            {obs.escalation && (
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-orange-400">
-                                → Escalatie: {obs.escalation}
+                          <div className="flex-1 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-mono text-muted-foreground">
+                                {new Date(obs.createdAt).toLocaleTimeString()} — ID: {obs.id.slice(0, 8)}
                               </span>
-                            )}
+                              <Badge className={`text-[10px] h-5 ${config.bg} ${config.color} border ${config.border}`}>
+                                {categoryLabels[obs.category] || obs.category}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-medium" data-testid={`text-observation-${obs.id}`}>{obs.text}</p>
+                            <div className="pt-2 flex gap-2 flex-wrap">
+                              <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${config.bg} ${config.color}`}>
+                                TaoGate: {config.gateText}
+                              </span>
+                              {obs.escalation && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/50 text-orange-400">
+                                  → Escalatie: {obs.escalation}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))
+                      </motion.div>
+                    );
+                  })
                 )}
               </AnimatePresence>
             </ScrollArea>

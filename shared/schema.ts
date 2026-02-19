@@ -3,10 +3,13 @@ import { pgTable, text, varchar, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const gateDecisions = ["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"] as const;
+export type GateDecision = typeof gateDecisions[number];
+
 export const scopeCategorySchema = z.object({
   name: z.string(),
   label: z.string(),
-  status: z.enum(["PASS", "BLOCK"]),
+  status: z.enum(gateDecisions),
   escalation: z.string().nullable(),
   keywords: z.array(z.string()),
   color: z.string().optional(),
