@@ -14,7 +14,7 @@ export async function fetchStats(context?: string) {
   return res.json();
 }
 
-export async function createObservation(data: { text: string; status: string; category: string; context: string }) {
+export async function createObservation(data: { text: string; status: string; category: string; escalation: string | null; context: string }) {
   const res = await fetch("/api/observations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -7,8 +7,9 @@ export const observations = pgTable("observations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   text: text("text").notNull(),
   status: text("status").notNull(), // "PASS" or "BLOCK"
-  category: text("category").notNull(), // "Observation", "Intervention", "Allocatie", "Command"
-  context: text("context").notNull().default("IC"), // e.g. "IC", "Legal Review"
+  category: text("category").notNull(), // "Observation", "Clinical_Intervention", "Operational_Command", "Allocation"
+  escalation: text("escalation"), // null for PASS, "Intensivist" | "OvD" | "IC-Hoofdarts" for BLOCK
+  context: text("context").notNull().default("IC"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
