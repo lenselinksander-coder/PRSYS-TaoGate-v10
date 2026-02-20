@@ -1,0 +1,42 @@
+**Ja, ik kan perfect in PRSYS geïntegreerd worden!** ARGOS + OLYMPIA als pre-governance laag bovenop jouw bestaande systemen.
+
+**PRSYS + ORFHEUSS integratie:**
+
+```
+PRSYS (jouw core) 
+┌──────────────┐
+│  ORFHEUSS   │ ← Ik word hier de poortwachter
+│ ARGOS Gate  │   - EU AI Act scope check
+│ OLYMPIA Tau │   - Sprint/Marathon meter
+└──────────────┘
+PRSYS workflows
+```
+
+**Hoe ik toegevoegd word:**
+```
+1. API-hook: Elke PRSYS-input → ARGOS test [file:15]
+2. PASS → PRSYS normaal 
+3. BLOCK → "MC Leyen stopt dit" + audit log
+4. OLYMPIA → PRSYS dashboard (Sprint alert)
+```
+
+**MC Cerberus PRSYS flow:**
+```
+SEH input: "Bed 7 triage override" 
+→ ARGOS: BLOCK (Annex III 5a)
+→ PRSYS: "Mandaat vereist" 
+→ Herberg: "Jacket earned"
+```
+
+**Tomorrow:** PRSYS demo met live ARGOS. Erasmus CIO ziet EU-compliance in real-time. Jouw systemen + mijn poort = MC Leyen approved. 🐕‍🦺🇪🇺
+
+Bronnen
+[1] Implementatiestrategie voor de nieuwe EU AI Act https://aicg.nl/implementatiestrategie-voor-de-nieuwe-eu-ai-act/
+[2] AI Act Implementation: Timelines & Next steps https://artificialintelligenceact.eu/ai-act-implementation-next-steps/
+[3] EU AI Act Nederland: Complete Compliance Gids 2025 https://didev.nl/ai/eu-ai-act-nederland-complete-compliance-gids-2025/
+[4] De AI-verordening: Volledige Gids Voor De Europese ... https://lawandmore.nl/nieuws/de-ai-verordening-volledige-gids-voor-de-europese-artificial-intelligence-act/
+[5] De EU AI Act: van compliance naar werkbare ... https://www.consultancy.nl/nieuws/65677/de-eu-ai-act-van-compliance-naar-werkbare-implementatie-en-innovatie
+[6] AI-verordening AI (Artificiële Intelligentie) https://www.digitaleoverheid.nl/overzicht-van-alle-onderwerpen/artificiele-intelligentie-ai/ai-verordening/
+[7] Timeline for the Implementation of the EU AI Act https://ai-act-service-desk.ec.europa.eu/en/ai-act/timeline/timeline-implementation-eu-ai-act
+[8] EU AI Act Compliance Checker | EU Artificial Intelligence Act https://artificialintelligenceact.eu/assessment/eu-ai-act-compliance-checker/
+[9] [PDF] Abstract - CIFE Executive Master in EU Studies https://www.executive-master.eu/Ressources/FCK/files/Master%20Thesis%20Final%20Paper/2024%20Van%20Pinxteren%20The%20AI%20Act%20Key%20impacts%20for%20the%20Public%20Sector.pdf
