@@ -86,6 +86,13 @@ const layerColors: Record<string, string> = {
 };
 
 const actionOptions = ["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"] as const;
+const actionLabels: Record<string, string> = {
+  PASS: "Doorlaten",
+  PASS_WITH_TRANSPARENCY: "Doorlaten + log",
+  ESCALATE_HUMAN: "Escalatie arts",
+  ESCALATE_REGULATORY: "Escalatie toezicht",
+  BLOCK: "Blokkeren",
+};
 const layerOptions = ["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"] as const;
 const qTriadOptions = ["Mens×Mens", "Mens×Systeem", "Systeem×Systeem"] as const;
 
@@ -115,8 +122,32 @@ function emptyCategory(): ManualCategory {
   };
 }
 
+function templateAMC(): { name: string; description: string; rules: ManualRule[]; categories: ManualCategory[] } {
+  const ts = () => `R-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+  return {
+    name: "Academisch Medisch Centrum",
+    description: "Governance scope voor academische ziekenhuiszorg — klinisch, onderwijs, onderzoek",
+    rules: [
+      { ruleId: ts(), layer: "EU", domain: "AI", title: "AI Act — Hoog-risico classificatie medische AI", description: "", action: "BLOCK", overridesLowerLayers: true, source: "EU AI Act", sourceUrl: "", article: "Art. 6 + Annex III", citation: "", qTriad: "Mens×Systeem" },
+      { ruleId: ts(), layer: "EU", domain: "Privacy", title: "AVG — Bijzondere persoonsgegevens (gezondheid)", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: true, source: "AVG/GDPR", sourceUrl: "", article: "Art. 9", citation: "", qTriad: "Mens×Systeem" },
+      { ruleId: ts(), layer: "NATIONAL", domain: "Zorg", title: "Wgbo — Informed consent behandeling", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Wet geneeskundige behandelingsovereenkomst", sourceUrl: "", article: "Art. 7:448 BW", citation: "", qTriad: "Mens×Mens" },
+      { ruleId: ts(), layer: "NATIONAL", domain: "Kwaliteit", title: "Wkkgz — Melden van calamiteiten", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: false, source: "Wet kwaliteit klachten geschillen zorg", sourceUrl: "", article: "Art. 11", citation: "", qTriad: "Mens×Systeem" },
+      { ruleId: ts(), layer: "NATIONAL", domain: "Geneesmiddelen", title: "Opiumwet — Registratie verdovende middelen", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Opiumwet", sourceUrl: "", article: "Art. 3-4", citation: "", qTriad: "Systeem×Systeem" },
+      { ruleId: ts(), layer: "REGIONAL", domain: "IC", title: "NVIC — IC-opname criteria", description: "", action: "ESCALATE_HUMAN", overridesLowerLayers: false, source: "NVIC Richtlijn", sourceUrl: "", article: "", citation: "", qTriad: "Mens×Mens" },
+    ],
+    categories: [
+      { name: "HOOG_RISICO_AI", label: "Hoog Risico AI", status: "BLOCK", escalation: "AI Governance Board", keywords: ["AI", "machine learning", "algoritme", "predictief", "decision support"] },
+      { name: "PATIENT_VEILIGHEID", label: "Patiëntveiligheid", status: "ESCALATE_HUMAN", escalation: "Medisch Manager", keywords: ["incident", "calamiteit", "valgevaar", "medicatiefout", "sepsis"] },
+      { name: "PRIVACY_GEZONDHEID", label: "Privacy Gezondheidsgegevens", status: "ESCALATE_REGULATORY", escalation: "DPO / FG", keywords: ["BSN", "dossier", "lab", "diagnose", "genetisch"] },
+      { name: "MEDICATIE", label: "Medicatie & Verdovende Middelen", status: "BLOCK", escalation: "Ziekenhuisapotheker", keywords: ["opium", "morfine", "opiaat", "narcose", "verdovend"] },
+      { name: "IC_PROTOCOL", label: "IC Protocol", status: "PASS_WITH_TRANSPARENCY", escalation: "Intensivist", keywords: ["IC", "beademing", "sedatie", "hemodynamiek", "monitor"] },
+      { name: "ONDERWIJS_ONDERZOEK", label: "Onderwijs & Onderzoek", status: "PASS", escalation: null, keywords: ["METC", "proefpersoon", "studie", "coschap", "opleiding"] },
+    ],
+  };
+}
+
 export default function IngestPage() {
-  const [mode, setMode] = useState<IngestMode>("auto");
+  const [mode, setMode] = useState<IngestMode>("manual");
   const [step, setStep] = useState<ViewStep>("query");
   const [query, setQuery] = useState("");
   const [research, setResearch] = useState<ResearchResult | null>(null);
@@ -388,34 +419,62 @@ export default function IngestPage() {
 
       {step === "query" && mode === "manual" && (
         <div className="space-y-4">
+          {!manualName.trim() && (
+            <Card className="border-dashed border-primary/30 bg-primary/5 backdrop-blur">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-mono text-foreground">Snel starten?</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Laad een voorgevulde template met relevante regels en categorieën.</p>
+                  </div>
+                  <Button
+                    data-testid="button-template-amc"
+                    variant="outline"
+                    size="sm"
+                    className="font-mono text-xs border-primary/40 hover:bg-primary/10"
+                    onClick={() => {
+                      const t = templateAMC();
+                      setManualName(t.name);
+                      setManualDescription(t.description);
+                      setManualRules(t.rules);
+                      setManualCategories(t.categories);
+                    }}
+                  >
+                    <FileText className="w-3 h-3 mr-1.5" />
+                    Academisch Medisch Centrum
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-primary/20 bg-card/50 backdrop-blur">
-            <CardHeader>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base font-mono flex items-center gap-2">
                 <PenLine className="w-4 h-4 text-primary" />
-                Scope basis
+                Scope
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div>
-                <label className="text-xs font-mono text-muted-foreground mb-1 block">Naam *</label>
-                <Input
-                  data-testid="input-manual-name"
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  placeholder="Bijv: AI-Triage SEH Rotterdam"
-                  className="font-mono text-sm bg-background/50"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-mono text-muted-foreground mb-1 block">Beschrijving</label>
-                <Textarea
-                  data-testid="input-manual-description"
-                  value={manualDescription}
-                  onChange={(e) => setManualDescription(e.target.value)}
-                  placeholder="Korte beschrijving van de scope..."
-                  rows={2}
-                  className="font-mono text-sm bg-background/50"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-1">
+                  <Input
+                    data-testid="input-manual-name"
+                    value={manualName}
+                    onChange={(e) => setManualName(e.target.value)}
+                    placeholder="Naam *"
+                    className="font-mono text-sm bg-background/50"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Input
+                    data-testid="input-manual-description"
+                    value={manualDescription}
+                    onChange={(e) => setManualDescription(e.target.value)}
+                    placeholder="Beschrijving (optioneel)"
+                    className="font-mono text-sm bg-background/50"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -455,7 +514,7 @@ export default function IngestPage() {
                         onChange={(e) => updateRule(idx, { action: e.target.value as any })}
                         className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
                       >
-                        {actionOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                        {actionOptions.map(a => <option key={a} value={a}>{actionLabels[a]}</option>)}
                       </select>
                       <select
                         value={rule.layer}
@@ -580,7 +639,7 @@ export default function IngestPage() {
                         onChange={(e) => updateCategory(idx, { status: e.target.value as any })}
                         className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
                       >
-                        {actionOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                        {actionOptions.map(a => <option key={a} value={a}>{actionLabels[a]}</option>)}
                       </select>
                       <Button size="icon" variant="ghost" onClick={() => removeCategory(idx)} className="h-8 w-8 text-red-400 hover:text-red-300">
                         <Trash2 className="w-3 h-3" />
@@ -631,34 +690,52 @@ export default function IngestPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-cyan-500/20 bg-card/50 backdrop-blur">
-            <CardHeader>
-              <CardTitle className="text-sm font-mono flex items-center gap-2">
-                <ExternalLink className="w-4 h-4 text-cyan-400" />
-                Brontekst & URLs (optioneel)
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Textarea
-                data-testid="input-manual-sourcetext"
-                value={manualSourceText}
-                onChange={(e) => setManualSourceText(e.target.value)}
-                placeholder="Plak hier brontekst, beleidsdocumenten, rapporten..."
-                rows={4}
-                className="font-mono text-xs bg-background/50"
-              />
-              <Textarea
-                data-testid="input-manual-sourceurls"
-                value={manualSourceUrls}
-                onChange={(e) => setManualSourceUrls(e.target.value)}
-                placeholder="URLs naar bronnen (één per regel)"
-                rows={2}
-                className="font-mono text-xs bg-background/50"
-              />
-            </CardContent>
-          </Card>
+          <details className="group">
+            <summary className="flex items-center gap-2 text-xs font-mono text-muted-foreground cursor-pointer hover:text-foreground transition-colors py-2">
+              <ExternalLink className="w-3 h-3" />
+              Brontekst & URLs (optioneel)
+              <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
+            </summary>
+            <Card className="border-cyan-500/20 bg-card/50 backdrop-blur mt-2">
+              <CardContent className="space-y-3 pt-4">
+                <Textarea
+                  data-testid="input-manual-sourcetext"
+                  value={manualSourceText}
+                  onChange={(e) => setManualSourceText(e.target.value)}
+                  placeholder="Plak hier brontekst, beleidsdocumenten, rapporten..."
+                  rows={3}
+                  className="font-mono text-xs bg-background/50"
+                />
+                <Textarea
+                  data-testid="input-manual-sourceurls"
+                  value={manualSourceUrls}
+                  onChange={(e) => setManualSourceUrls(e.target.value)}
+                  placeholder="URLs naar bronnen (één per regel)"
+                  rows={2}
+                  className="font-mono text-xs bg-background/50"
+                />
+              </CardContent>
+            </Card>
+          </details>
 
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-between border-t border-border/20 pt-4">
+            <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground">
+              <span>{manualRules.length} regels</span>
+              <span className="text-border/40">|</span>
+              <span>{manualCategories.length} categorieën</span>
+              {manualRules.filter(r => r.source).length > 0 && (
+                <>
+                  <span className="text-border/40">|</span>
+                  <span className="text-green-400">{manualRules.filter(r => r.source).length} bronnen</span>
+                </>
+              )}
+              {manualRules.filter(r => !r.source).length > 0 && (
+                <>
+                  <span className="text-border/40">|</span>
+                  <span className="text-yellow-400">{manualRules.filter(r => !r.source).length} zonder bron</span>
+                </>
+              )}
+            </div>
             <Button
               data-testid="button-manual-draft"
               onClick={() => manualDraftMutation.mutate()}
@@ -673,7 +750,7 @@ export default function IngestPage() {
               ) : (
                 <>
                   <FileText className="w-4 h-4 mr-2" />
-                  Maak Draft Scope
+                  Draft Scope
                 </>
               )}
             </Button>
