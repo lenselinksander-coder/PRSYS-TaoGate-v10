@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Search, FileText, Lock, ExternalLink, AlertTriangle, CheckCircle, XCircle, Loader2, ChevronDown, ChevronUp, Plus, Trash2, PenLine, Zap } from "lucide-react";
+import { Search, FileText, Lock, ExternalLink, AlertTriangle, CheckCircle, XCircle, Loader2, ChevronDown, ChevronUp, Plus, Trash2, PenLine, Zap, Settings2 } from "lucide-react";
 
 type ViewStep = "query" | "research" | "draft" | "locked";
 type IngestMode = "auto" | "manual";
@@ -132,6 +132,8 @@ export default function IngestPage() {
   const [manualSourceText, setManualSourceText] = useState("");
   const [manualSourceUrls, setManualSourceUrls] = useState("");
   const [keywordInput, setKeywordInput] = useState<Record<number, string>>({});
+  const [expandedManualRules, setExpandedManualRules] = useState<Set<number>>(new Set());
+  const [expandedManualCats, setExpandedManualCats] = useState<Set<number>>(new Set());
 
   const researchMutation = useMutation({
     mutationFn: async (q: string) => {
@@ -437,86 +439,105 @@ export default function IngestPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {manualRules.map((rule, idx) => (
-                <div key={idx} className="border border-border/30 rounded-lg p-3 bg-background/30 space-y-2" data-testid={`manual-rule-${idx}`}>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={rule.title}
-                      onChange={(e) => updateRule(idx, { title: e.target.value })}
-                      placeholder="Titel van de regel"
-                      className="font-mono text-sm bg-background/50 flex-1"
-                    />
-                    <Button size="icon" variant="ghost" onClick={() => removeRule(idx)} className="h-8 w-8 text-red-400 hover:text-red-300">
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+              {manualRules.map((rule, idx) => {
+                const isExpanded = expandedManualRules.has(idx);
+                return (
+                  <div key={idx} className="border border-border/30 rounded-lg p-3 bg-background/30 space-y-2" data-testid={`manual-rule-${idx}`}>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={rule.title}
+                        onChange={(e) => updateRule(idx, { title: e.target.value })}
+                        placeholder="Titel van de regel"
+                        className="font-mono text-sm bg-background/50 flex-1"
+                      />
+                      <select
+                        value={rule.action}
+                        onChange={(e) => updateRule(idx, { action: e.target.value as any })}
+                        className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
+                      >
+                        {actionOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      <select
+                        value={rule.layer}
+                        onChange={(e) => updateRule(idx, { layer: e.target.value as any })}
+                        className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5 w-28"
+                      >
+                        {layerOptions.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                      <Button size="icon" variant="ghost" onClick={() => removeRule(idx)} className="h-8 w-8 text-red-400 hover:text-red-300">
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={rule.source}
+                        onChange={(e) => updateRule(idx, { source: e.target.value })}
+                        placeholder="Bron (wet/richtlijn)"
+                        className="font-mono text-xs bg-background/50 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setExpandedManualRules(prev => {
+                          const next = new Set(prev);
+                          if (next.has(idx)) next.delete(idx); else next.add(idx);
+                          return next;
+                        })}
+                        className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+                      >
+                        <Settings2 className="w-3 h-3" />
+                        {isExpanded ? "minder" : "meer"}
+                      </button>
+                    </div>
+                    {isExpanded && (
+                      <div className="space-y-2 pt-1 border-t border-border/20">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            value={rule.domain}
+                            onChange={(e) => updateRule(idx, { domain: e.target.value })}
+                            placeholder="Domein (bijv. AI, Privacy)"
+                            className="font-mono text-xs bg-background/50"
+                          />
+                          <select
+                            value={rule.qTriad || ""}
+                            onChange={(e) => updateRule(idx, { qTriad: (e.target.value || undefined) as any })}
+                            className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
+                          >
+                            <option value="">Q-Triad...</option>
+                            {qTriadOptions.map(q => <option key={q} value={q}>{q}</option>)}
+                          </select>
+                        </div>
+                        <Textarea
+                          value={rule.description}
+                          onChange={(e) => updateRule(idx, { description: e.target.value })}
+                          placeholder="Toelichting (optioneel)"
+                          rows={2}
+                          className="font-mono text-xs bg-background/50"
+                        />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <Input
+                            value={rule.sourceUrl}
+                            onChange={(e) => updateRule(idx, { sourceUrl: e.target.value })}
+                            placeholder="URL naar bron"
+                            className="font-mono text-xs bg-background/50"
+                          />
+                          <Input
+                            value={rule.article}
+                            onChange={(e) => updateRule(idx, { article: e.target.value })}
+                            placeholder="Artikel"
+                            className="font-mono text-xs bg-background/50"
+                          />
+                          <Input
+                            value={rule.citation}
+                            onChange={(e) => updateRule(idx, { citation: e.target.value })}
+                            placeholder="Citaat"
+                            className="font-mono text-xs bg-background/50"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    <select
-                      value={rule.action}
-                      onChange={(e) => updateRule(idx, { action: e.target.value as any })}
-                      className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
-                    >
-                      {actionOptions.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                    <select
-                      value={rule.layer}
-                      onChange={(e) => updateRule(idx, { layer: e.target.value as any })}
-                      className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
-                    >
-                      {layerOptions.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
-                    <Input
-                      value={rule.domain}
-                      onChange={(e) => updateRule(idx, { domain: e.target.value })}
-                      placeholder="Domein"
-                      className="font-mono text-xs bg-background/50"
-                    />
-                    <select
-                      value={rule.qTriad || ""}
-                      onChange={(e) => updateRule(idx, { qTriad: (e.target.value || undefined) as any })}
-                      className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
-                    >
-                      <option value="">Q-Triad...</option>
-                      {qTriadOptions.map(q => <option key={q} value={q}>{q}</option>)}
-                    </select>
-                  </div>
-                  <Textarea
-                    value={rule.description}
-                    onChange={(e) => updateRule(idx, { description: e.target.value })}
-                    placeholder="Wat houdt deze regel in?"
-                    rows={2}
-                    className="font-mono text-xs bg-background/50"
-                  />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <Input
-                      value={rule.source}
-                      onChange={(e) => updateRule(idx, { source: e.target.value })}
-                      placeholder="Bron (wet/richtlijn)"
-                      className="font-mono text-xs bg-background/50"
-                    />
-                    <Input
-                      value={rule.sourceUrl}
-                      onChange={(e) => updateRule(idx, { sourceUrl: e.target.value })}
-                      placeholder="URL naar bron"
-                      className="font-mono text-xs bg-background/50"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <Input
-                      value={rule.article}
-                      onChange={(e) => updateRule(idx, { article: e.target.value })}
-                      placeholder="Artikel (optioneel)"
-                      className="font-mono text-xs bg-background/50"
-                    />
-                    <Input
-                      value={rule.citation}
-                      onChange={(e) => updateRule(idx, { citation: e.target.value })}
-                      placeholder="Citaat (optioneel)"
-                      className="font-mono text-xs bg-background/50"
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
@@ -539,62 +560,74 @@ export default function IngestPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {manualCategories.map((cat, idx) => (
-                <div key={idx} className="border border-border/30 rounded-lg p-3 bg-background/30 space-y-2" data-testid={`manual-category-${idx}`}>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={cat.name}
-                      onChange={(e) => updateCategory(idx, { name: e.target.value.toUpperCase().replace(/\s/g, "_") })}
-                      placeholder="NAAM_CODE"
-                      className="font-mono text-xs bg-background/50 w-40"
-                    />
-                    <Input
-                      value={cat.label}
-                      onChange={(e) => updateCategory(idx, { label: e.target.value })}
-                      placeholder="Leesbare naam"
-                      className="font-mono text-xs bg-background/50 flex-1"
-                    />
-                    <select
-                      value={cat.status}
-                      onChange={(e) => updateCategory(idx, { status: e.target.value as any })}
-                      className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
-                    >
-                      {actionOptions.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                    <Button size="icon" variant="ghost" onClick={() => removeCategory(idx)} className="h-8 w-8 text-red-400 hover:text-red-300">
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                  <Input
-                    value={cat.escalation || ""}
-                    onChange={(e) => updateCategory(idx, { escalation: e.target.value || null })}
-                    placeholder="Escalatiedoel (optioneel)"
-                    className="font-mono text-xs bg-background/50"
-                  />
-                  <div>
-                    <div className="flex flex-wrap gap-1 mb-1">
-                      {cat.keywords.map((kw, j) => (
-                        <span key={j} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground flex items-center gap-1">
-                          {kw}
-                          <button onClick={() => removeKeyword(idx, j)} className="text-red-400 hover:text-red-300">×</button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-1">
+              {manualCategories.map((cat, idx) => {
+                const isCatExpanded = expandedManualCats.has(idx);
+                return (
+                  <div key={idx} className="border border-border/30 rounded-lg p-3 bg-background/30 space-y-2" data-testid={`manual-category-${idx}`}>
+                    <div className="flex items-center gap-2">
                       <Input
-                        value={keywordInput[idx] || ""}
-                        onChange={(e) => setKeywordInput(prev => ({ ...prev, [idx]: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(idx); } }}
-                        placeholder="Trefwoord + Enter"
-                        className="font-mono text-xs bg-background/50"
+                        value={cat.label}
+                        onChange={(e) => {
+                          const label = e.target.value;
+                          const name = label.toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "");
+                          updateCategory(idx, { label, name });
+                        }}
+                        placeholder="Naam (bijv. Hoog Risico AI)"
+                        className="font-mono text-sm bg-background/50 flex-1"
                       />
-                      <Button size="sm" variant="ghost" onClick={() => addKeyword(idx)} className="text-xs font-mono px-2">
-                        <Plus className="w-3 h-3" />
+                      <select
+                        value={cat.status}
+                        onChange={(e) => updateCategory(idx, { status: e.target.value as any })}
+                        className="text-xs font-mono bg-background/50 border border-border/30 rounded px-2 py-1.5"
+                      >
+                        {actionOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                      <Button size="icon" variant="ghost" onClick={() => removeCategory(idx)} className="h-8 w-8 text-red-400 hover:text-red-300">
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center gap-1 flex-wrap">
+                        {cat.keywords.map((kw, j) => (
+                          <span key={j} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/30 text-muted-foreground flex items-center gap-1">
+                            {kw}
+                            <button onClick={() => removeKeyword(idx, j)} className="text-red-400 hover:text-red-300">×</button>
+                          </span>
+                        ))}
+                        <Input
+                          value={keywordInput[idx] || ""}
+                          onChange={(e) => setKeywordInput(prev => ({ ...prev, [idx]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(idx); } }}
+                          placeholder="Trefwoord + Enter"
+                          className="font-mono text-xs bg-background/50 w-32 h-6"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedManualCats(prev => {
+                          const next = new Set(prev);
+                          if (next.has(idx)) next.delete(idx); else next.add(idx);
+                          return next;
+                        })}
+                        className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+                      >
+                        <Settings2 className="w-3 h-3" />
+                        {isCatExpanded ? "minder" : "meer"}
+                      </button>
+                    </div>
+                    {isCatExpanded && (
+                      <div className="pt-1 border-t border-border/20">
+                        <Input
+                          value={cat.escalation || ""}
+                          onChange={(e) => updateCategory(idx, { escalation: e.target.value || null })}
+                          placeholder="Escalatiedoel (bijv. DPO, AI Office)"
+                          className="font-mono text-xs bg-background/50"
+                        />
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </CardContent>
           </Card>
 
