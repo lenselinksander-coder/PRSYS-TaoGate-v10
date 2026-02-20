@@ -11,12 +11,14 @@ import ManualPage from "@/pages/ManualPage";
 import LexiconPage from "@/pages/LexiconPage";
 import ReadmePage from "@/pages/ReadmePage";
 import ScopesPage from "@/pages/ScopesPage";
+import IngestPage from "@/pages/IngestPage";
 
 function Router() {
   return (
     <Layout>
       <Switch>
         <Route path="/" component={ArgosPage} />
+        <Route path="/ingest" component={IngestPage} />
         <Route path="/scopes" component={ScopesPage} />
         <Route path="/olympia" component={OlympiaPage} />
         <Route path="/lexicon" component={LexiconPage} />

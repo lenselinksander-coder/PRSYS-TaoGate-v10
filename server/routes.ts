@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertObservationSchema, insertScopeSchema, ruleLayers } from "@shared/schema";
 import type { Scope, GateDecision, ScopeRule, RuleLayer } from "@shared/schema";
 import { z } from "zod";
+import { researchTopic, extractScopeFromResearch, preflightCheck } from "./perplexity";
 
 function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null } {
   const lower = text.toLowerCase();
@@ -216,6 +217,121 @@ export async function registerRoutes(
     const deleted = await storage.deleteScope(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Scope not found" });
     return res.json({ success: true });
+  });
+
+  const researchSchema = z.object({
+    query: z.string().min(3, "Zoekvraag moet minimaal 3 tekens zijn"),
+  });
+
+  app.post("/api/ingest/research", async (req, res) => {
+    const parsed = researchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+      const result = await researchTopic(parsed.data.query);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("Perplexity research error:", err);
+      return res.status(502).json({ error: err.message || "Perplexity API error" });
+    }
+  });
+
+  const extractSchema = z.object({
+    query: z.string(),
+    content: z.string(),
+    citations: z.array(z.string()),
+  });
+
+  app.post("/api/ingest/extract", async (req, res) => {
+    const parsed = extractSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+      const result = await extractScopeFromResearch(
+        parsed.data.query,
+        parsed.data.content,
+        parsed.data.citations
+      );
+      return res.json(result);
+    } catch (err: any) {
+      console.error("Perplexity extraction error:", err);
+      return res.status(502).json({ error: err.message || "Extraction failed" });
+    }
+  });
+
+  app.post("/api/ingest/draft", async (req, res) => {
+    const parsed = extractSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+      const extraction = await extractScopeFromResearch(
+        parsed.data.query,
+        parsed.data.content,
+        parsed.data.citations
+      );
+
+      const scope = await storage.createScope({
+        name: extraction.name,
+        description: extraction.description,
+        status: "DRAFT",
+        categories: extraction.categories,
+        rules: extraction.rules,
+        documents: [],
+        ingestMeta: {
+          query: parsed.data.query,
+          citations: parsed.data.citations,
+          researchedAt: new Date().toISOString(),
+          model: "llama-3.1-sonar-small-128k-online",
+          gaps: extraction.gaps,
+        },
+      });
+
+      return res.status(201).json(scope);
+    } catch (err: any) {
+      console.error("Draft creation error:", err);
+      return res.status(502).json({ error: err.message || "Draft creation failed" });
+    }
+  });
+
+  app.post("/api/scopes/:id/preflight", async (req, res) => {
+    const scope = await storage.getScope(req.params.id);
+    if (!scope) return res.status(404).json({ error: "Scope not found" });
+
+    const result = preflightCheck({
+      rules: (scope.rules || []) as any,
+      categories: (scope.categories || []) as any,
+      gaps: (scope.ingestMeta as any)?.gaps,
+    });
+
+    return res.json(result);
+  });
+
+  app.post("/api/scopes/:id/lock", async (req, res) => {
+    const scope = await storage.getScope(req.params.id);
+    if (!scope) return res.status(404).json({ error: "Scope not found" });
+
+    if (scope.status === "LOCKED") {
+      return res.status(400).json({ error: "Scope is al LOCKED" });
+    }
+
+    const preflight = preflightCheck({
+      rules: (scope.rules || []) as any,
+      categories: (scope.categories || []) as any,
+      gaps: (scope.ingestMeta as any)?.gaps,
+    });
+
+    if (!preflight.canLock) {
+      return res.status(422).json({
+        error: "Preflight gefaald — scope kan niet gelocked worden",
+        preflight,
+      });
+    }
+
+    const locked = await storage.updateScope(scope.id, { status: "LOCKED" });
+    return res.json({ scope: locked, preflight });
   });
 
   return httpServer;
