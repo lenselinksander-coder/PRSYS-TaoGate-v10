@@ -122,29 +122,136 @@ function emptyCategory(): ManualCategory {
   };
 }
 
-function templateAMC(): { name: string; description: string; rules: ManualRule[]; categories: ManualCategory[] } {
-  const ts = () => `R-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
-  return {
-    name: "Academisch Medisch Centrum",
-    description: "Governance scope voor academische ziekenhuiszorg — klinisch, onderwijs, onderzoek",
-    rules: [
-      { ruleId: ts(), layer: "EU", domain: "AI", title: "AI Act — Hoog-risico classificatie medische AI", description: "", action: "BLOCK", overridesLowerLayers: true, source: "EU AI Act", sourceUrl: "", article: "Art. 6 + Annex III", citation: "", qTriad: "Mens×Systeem" },
-      { ruleId: ts(), layer: "EU", domain: "Privacy", title: "AVG — Bijzondere persoonsgegevens (gezondheid)", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: true, source: "AVG/GDPR", sourceUrl: "", article: "Art. 9", citation: "", qTriad: "Mens×Systeem" },
-      { ruleId: ts(), layer: "NATIONAL", domain: "Zorg", title: "Wgbo — Informed consent behandeling", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Wet geneeskundige behandelingsovereenkomst", sourceUrl: "", article: "Art. 7:448 BW", citation: "", qTriad: "Mens×Mens" },
-      { ruleId: ts(), layer: "NATIONAL", domain: "Kwaliteit", title: "Wkkgz — Melden van calamiteiten", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: false, source: "Wet kwaliteit klachten geschillen zorg", sourceUrl: "", article: "Art. 11", citation: "", qTriad: "Mens×Systeem" },
-      { ruleId: ts(), layer: "NATIONAL", domain: "Geneesmiddelen", title: "Opiumwet — Registratie verdovende middelen", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Opiumwet", sourceUrl: "", article: "Art. 3-4", citation: "", qTriad: "Systeem×Systeem" },
-      { ruleId: ts(), layer: "REGIONAL", domain: "IC", title: "NVIC — IC-opname criteria", description: "", action: "ESCALATE_HUMAN", overridesLowerLayers: false, source: "NVIC Richtlijn", sourceUrl: "", article: "", citation: "", qTriad: "Mens×Mens" },
-    ],
-    categories: [
-      { name: "HOOG_RISICO_AI", label: "Hoog Risico AI", status: "BLOCK", escalation: "AI Governance Board", keywords: ["AI", "machine learning", "algoritme", "predictief", "decision support"] },
-      { name: "PATIENT_VEILIGHEID", label: "Patiëntveiligheid", status: "ESCALATE_HUMAN", escalation: "Medisch Manager", keywords: ["incident", "calamiteit", "valgevaar", "medicatiefout", "sepsis"] },
-      { name: "PRIVACY_GEZONDHEID", label: "Privacy Gezondheidsgegevens", status: "ESCALATE_REGULATORY", escalation: "DPO / FG", keywords: ["BSN", "dossier", "lab", "diagnose", "genetisch"] },
-      { name: "MEDICATIE", label: "Medicatie & Verdovende Middelen", status: "BLOCK", escalation: "Ziekenhuisapotheker", keywords: ["opium", "morfine", "opiaat", "narcose", "verdovend"] },
-      { name: "IC_PROTOCOL", label: "IC Protocol", status: "PASS_WITH_TRANSPARENCY", escalation: "Intensivist", keywords: ["IC", "beademing", "sedatie", "hemodynamiek", "monitor"] },
-      { name: "ONDERWIJS_ONDERZOEK", label: "Onderwijs & Onderzoek", status: "PASS", escalation: null, keywords: ["METC", "proefpersoon", "studie", "coschap", "opleiding"] },
-    ],
-  };
+interface DeptTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  standaard: { label: string; keywords: string[]; status: typeof actionOptions[number]; escalation: string | null }[];
+  acuut: { label: string; keywords: string[]; status: typeof actionOptions[number]; escalation: string }[];
+  rules: Omit<ManualRule, "ruleId">[];
 }
+
+const ts = () => `R-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+const AMC_DEPARTMENTS: DeptTemplate[] = [
+  {
+    id: "ic", name: "Intensive Care", icon: "🫀",
+    standaard: [
+      { label: "Beademing", keywords: ["beademing", "ventilator", "PEEP", "tidalvolume", "weaning"], status: "PASS_WITH_TRANSPARENCY", escalation: "Intensivist" },
+      { label: "Sedatie & Analgesie", keywords: ["sedatie", "propofol", "midazolam", "fentanyl", "RASS", "BIS"], status: "ESCALATE_HUMAN", escalation: "Intensivist" },
+      { label: "Hemodynamiek", keywords: ["bloeddruk", "noradrenaline", "cardiac output", "MAP", "CVD", "Swan-Ganz"], status: "PASS_WITH_TRANSPARENCY", escalation: "Intensivist" },
+      { label: "Infectie IC", keywords: ["sepsis", "SOFA", "bloedkweek", "antibiotica", "lijninfectie", "VAP"], status: "ESCALATE_HUMAN", escalation: "Infectioloog" },
+    ],
+    acuut: [
+      { label: "Reanimatie", keywords: ["reanimatie", "CPR", "ALS", "VF", "asystolie", "ROSC"], status: "BLOCK", escalation: "Reanimatieteam" },
+      { label: "Acute orgaanfalen", keywords: ["orgaanfalen", "MODS", "ARDS", "acuut nierfalen", "leverfalen", "ECMO"], status: "ESCALATE_HUMAN", escalation: "Intensivist + Specialist" },
+    ],
+    rules: [
+      { layer: "NATIONAL", domain: "IC", title: "NVIC — IC-opname en ontslagcriteria", description: "", action: "ESCALATE_HUMAN", overridesLowerLayers: false, source: "NVIC Richtlijn", sourceUrl: "", article: "", citation: "", qTriad: "Mens×Mens" },
+      { layer: "NATIONAL", domain: "IC", title: "Wet op de lijkbezorging — overlijden IC", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Wet op de lijkbezorging", sourceUrl: "", article: "Art. 3-7", citation: "", qTriad: "Mens×Mens" },
+    ],
+  },
+  {
+    id: "seh", name: "Spoedeisende Hulp", icon: "🚨",
+    standaard: [
+      { label: "Triage", keywords: ["triage", "MTS", "Manchester", "urgentie", "wachttijd", "ESI"], status: "PASS_WITH_TRANSPARENCY", escalation: "SEH-arts" },
+      { label: "Trauma", keywords: ["trauma", "fractura", "bloeding", "wond", "val", "ongeval", "ATLS"], status: "ESCALATE_HUMAN", escalation: "Traumachirurg" },
+      { label: "Pijn & Acute klachten", keywords: ["pijn", "VAS", "NRS", "thoraxpijn", "buikpijn", "dyspnoe"], status: "PASS_WITH_TRANSPARENCY", escalation: "SEH-arts" },
+    ],
+    acuut: [
+      { label: "STEMI / Stroke", keywords: ["STEMI", "hartinfarct", "CVA", "stroke", "trombolyse", "PCI", "trombectomie"], status: "BLOCK", escalation: "Cardioloog / Neuroloog" },
+      { label: "Polytrauma", keywords: ["polytrauma", "multitrauma", "traumateam", "massatransfusie", "damage control"], status: "BLOCK", escalation: "Traumateam" },
+    ],
+    rules: [
+      { layer: "NATIONAL", domain: "SEH", title: "Kwaliteitskader Spoedzorgketen", description: "", action: "PASS_WITH_TRANSPARENCY", overridesLowerLayers: false, source: "NZa / LNAZ", sourceUrl: "", article: "", citation: "", qTriad: "Systeem×Systeem" },
+    ],
+  },
+  {
+    id: "ok", name: "Operatiekamer", icon: "🔪",
+    standaard: [
+      { label: "Preoperatief", keywords: ["preoperatief", "screening", "ASA", "vasten", "premedicatie", "informed consent"], status: "PASS_WITH_TRANSPARENCY", escalation: "Anesthesioloog" },
+      { label: "Intraoperatief", keywords: ["operatie", "incisie", "anesthesie", "bloedverlies", "OK-checklist", "time-out"], status: "PASS_WITH_TRANSPARENCY", escalation: "Chirurg" },
+      { label: "Postoperatief", keywords: ["recovery", "PACU", "wondcontrole", "pijnbestrijding", "mobilisatie"], status: "PASS", escalation: "Verpleegkundige" },
+    ],
+    acuut: [
+      { label: "Perioperatieve complicatie", keywords: ["bloeding", "anafylaxie", "maligne hyperthermie", "luchtwegobstructie", "cardiac arrest OK"], status: "BLOCK", escalation: "Anesthesioloog + Chirurg" },
+      { label: "Verkeerde kant / Patiënt", keywords: ["verkeerde kant", "wrong site", "patiëntverwissel", "time-out falen"], status: "BLOCK", escalation: "Chirurg + Raad van Bestuur" },
+    ],
+    rules: [
+      { layer: "NATIONAL", domain: "OK", title: "SURPASS chirurgische checklist", description: "", action: "BLOCK", overridesLowerLayers: false, source: "NVvH / SURPASS", sourceUrl: "", article: "", citation: "", qTriad: "Mens×Systeem" },
+    ],
+  },
+  {
+    id: "farmacie", name: "Farmacie", icon: "💊",
+    standaard: [
+      { label: "Medicatieverificatie", keywords: ["medicatieverificatie", "opname", "ontslag", "overdracht", "polyfarmacie"], status: "PASS_WITH_TRANSPARENCY", escalation: "Ziekenhuisapotheker" },
+      { label: "High-risk medicatie", keywords: ["high-risk", "cytostatica", "anticoagulantia", "insuline", "kalium IV", "LASA"], status: "ESCALATE_HUMAN", escalation: "Ziekenhuisapotheker" },
+      { label: "Opiumwet middelen", keywords: ["opium", "morfine", "oxycodon", "fentanyl", "methadon", "opiumwet"], status: "BLOCK", escalation: "Ziekenhuisapotheker" },
+    ],
+    acuut: [
+      { label: "Medicatiefout", keywords: ["medicatiefout", "verkeerde dosis", "verkeerd middel", "bijwerking ernstig", "overdosis"], status: "BLOCK", escalation: "Ziekenhuisapotheker + Arts" },
+    ],
+    rules: [
+      { layer: "NATIONAL", domain: "Farmacie", title: "Opiumwet — registratie verdovende middelen", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Opiumwet", sourceUrl: "", article: "Art. 3-4", citation: "", qTriad: "Systeem×Systeem" },
+      { layer: "NATIONAL", domain: "Farmacie", title: "Geneesmiddelenwet — bereiding & aflevering", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: false, source: "Geneesmiddelenwet", sourceUrl: "", article: "Art. 18", citation: "", qTriad: "Systeem×Systeem" },
+    ],
+  },
+  {
+    id: "radiologie", name: "Radiologie", icon: "📡",
+    standaard: [
+      { label: "Beeldvorming", keywords: ["CT", "MRI", "röntgen", "echo", "PET", "mammografie", "PACS"], status: "PASS", escalation: "Radioloog" },
+      { label: "Contrast & Stralingsbelasting", keywords: ["contrast", "jodium", "gadolinium", "stralingsdosis", "DLP", "ALARA"], status: "PASS_WITH_TRANSPARENCY", escalation: "Radioloog" },
+    ],
+    acuut: [
+      { label: "Contrastallergie", keywords: ["anafylaxie contrast", "contrastmiddelreactie", "allergische reactie"], status: "ESCALATE_HUMAN", escalation: "Radioloog + Anesthesioloog" },
+      { label: "Kritische onverwachte bevinding", keywords: ["onverwachte bevinding", "critical finding", "massalaesie", "pneumothorax nieuw", "hersenmetastase"], status: "BLOCK", escalation: "Radioloog → Behandelaar" },
+    ],
+    rules: [
+      { layer: "NATIONAL", domain: "Radiologie", title: "Besluit stralingsbescherming — rechtvaardiging", description: "", action: "PASS_WITH_TRANSPARENCY", overridesLowerLayers: false, source: "Besluit basisveiligheidsnormen stralingsbescherming", sourceUrl: "", article: "Art. 5.7", citation: "", qTriad: "Mens×Systeem" },
+    ],
+  },
+  {
+    id: "psychiatrie", name: "Psychiatrie", icon: "🧠",
+    standaard: [
+      { label: "Opname & Behandeling", keywords: ["psychiatrie", "opname", "behandelplan", "psychose", "depressie", "angst"], status: "PASS_WITH_TRANSPARENCY", escalation: "Psychiater" },
+      { label: "Dwangbehandeling", keywords: ["dwang", "Wvggz", "separatie", "fixatie", "verplichte zorg", "crisismaatregel"], status: "BLOCK", escalation: "Psychiater + Geneesheer-directeur" },
+    ],
+    acuut: [
+      { label: "Suïcidaliteit", keywords: ["suïcidaal", "suïcide", "zelfbeschadiging", "crisis", "gevaar eigen leven"], status: "BLOCK", escalation: "Psychiater + Crisisdienst" },
+      { label: "Acute agitatie / Gevaar", keywords: ["agitatie", "agressie", "gevaar voor anderen", "delirium", "acute psychose"], status: "ESCALATE_HUMAN", escalation: "Psychiater + Beveiliging" },
+    ],
+    rules: [
+      { layer: "NATIONAL", domain: "Psychiatrie", title: "Wvggz — Verplichte GGZ", description: "", action: "BLOCK", overridesLowerLayers: false, source: "Wet verplichte GGZ", sourceUrl: "", article: "Art. 3:1", citation: "", qTriad: "Mens×Mens" },
+    ],
+  },
+  {
+    id: "lab", name: "Laboratorium", icon: "🔬",
+    standaard: [
+      { label: "Routine diagnostiek", keywords: ["bloedafname", "lab", "hematologie", "chemie", "urineonderzoek", "HbA1c"], status: "PASS", escalation: "Klinisch chemicus" },
+      { label: "Microbiologie", keywords: ["kweek", "PCR", "resistentie", "MRSA", "BRMO", "antibiogram"], status: "PASS_WITH_TRANSPARENCY", escalation: "Arts-microbioloog" },
+    ],
+    acuut: [
+      { label: "Paniekwaarde", keywords: ["paniekwaarde", "kritiek lab", "kalium >6", "troponine hoog", "lactaat hoog", "Hb <4"], status: "BLOCK", escalation: "Arts-microbioloog → Behandelaar" },
+    ],
+    rules: [
+      { layer: "EU", domain: "Lab", title: "IVDR — In-vitro diagnostiek verordening", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: true, source: "EU IVDR 2017/746", sourceUrl: "", article: "Art. 5", citation: "", qTriad: "Systeem×Systeem" },
+    ],
+  },
+  {
+    id: "privacy", name: "Privacy & Data", icon: "🔐",
+    standaard: [
+      { label: "Dossierinzage", keywords: ["inzage", "dossier", "patiëntportaal", "kopie", "logging"], status: "PASS_WITH_TRANSPARENCY", escalation: "DPO / FG" },
+      { label: "Dataverwerking derden", keywords: ["verwerker", "cloud", "SaaS", "verwerkersovereenkomst", "sub-verwerker"], status: "ESCALATE_REGULATORY", escalation: "DPO / FG" },
+    ],
+    acuut: [
+      { label: "Datalek", keywords: ["datalek", "breach", "onbevoegde toegang", "USB kwijt", "mail fout", "hack"], status: "BLOCK", escalation: "DPO → AP (72 uur)" },
+    ],
+    rules: [
+      { layer: "EU", domain: "Privacy", title: "AVG — Bijzondere persoonsgegevens gezondheid", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: true, source: "AVG/GDPR", sourceUrl: "", article: "Art. 9", citation: "", qTriad: "Mens×Systeem" },
+      { layer: "NATIONAL", domain: "Privacy", title: "UAVG — Aanvullingswet", description: "", action: "ESCALATE_REGULATORY", overridesLowerLayers: false, source: "UAVG", sourceUrl: "", article: "Art. 22-30", citation: "", qTriad: "Systeem×Systeem" },
+    ],
+  },
+];
 
 export default function IngestPage() {
   const [mode, setMode] = useState<IngestMode>("manual");
@@ -165,6 +272,49 @@ export default function IngestPage() {
   const [keywordInput, setKeywordInput] = useState<Record<number, string>>({});
   const [expandedManualRules, setExpandedManualRules] = useState<Set<number>>(new Set());
   const [expandedManualCats, setExpandedManualCats] = useState<Set<number>>(new Set());
+  const [selectedDepts, setSelectedDepts] = useState<Set<string>>(new Set());
+
+  const toggleDept = (deptId: string) => {
+    const dept = AMC_DEPARTMENTS.find(d => d.id === deptId);
+    if (!dept) return;
+    setSelectedDepts(prev => {
+      const next = new Set(prev);
+      if (next.has(deptId)) {
+        next.delete(deptId);
+        const deptCatNames = new Set([...dept.standaard, ...dept.acuut].map(c => c.label.toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "")));
+        const deptRuleTitles = new Set(dept.rules.map(r => r.title));
+        setManualCategories(prev => prev.filter(c => !deptCatNames.has(c.name)));
+        setManualRules(prev => prev.filter(r => !deptRuleTitles.has(r.title)));
+      } else {
+        next.add(deptId);
+        const newCats: ManualCategory[] = [...dept.standaard, ...dept.acuut].map(item => ({
+          name: item.label.toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, ""),
+          label: item.label,
+          status: item.status,
+          escalation: item.escalation,
+          keywords: item.keywords,
+        }));
+        const newRules: ManualRule[] = dept.rules.map(r => ({ ...r, ruleId: ts() }));
+        setManualCategories(prev => {
+          const existing = new Set(prev.map(c => c.name));
+          const filtered = prev.filter(c => c.name !== "" || c.label !== "");
+          return [...filtered, ...newCats.filter(c => !existing.has(c.name))];
+        });
+        setManualRules(prev => {
+          const existing = new Set(prev.map(r => r.title));
+          const filtered = prev.filter(r => r.title !== "");
+          return [...filtered, ...newRules.filter(r => !existing.has(r.title))];
+        });
+        if (!manualName.trim()) {
+          setManualName("Academisch Medisch Centrum");
+          setManualDescription("Governance scope — " + dept.name);
+        } else if (manualDescription && !manualDescription.includes(dept.name)) {
+          setManualDescription(prev => prev + ", " + dept.name);
+        }
+      }
+      return next;
+    });
+  };
 
   const researchMutation = useMutation({
     mutationFn: async (q: string) => {
@@ -419,34 +569,69 @@ export default function IngestPage() {
 
       {step === "query" && mode === "manual" && (
         <div className="space-y-4">
-          {!manualName.trim() && (
-            <Card className="border-dashed border-primary/30 bg-primary/5 backdrop-blur">
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-mono text-foreground">Snel starten?</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Laad een voorgevulde template met relevante regels en categorieën.</p>
+          <Card className="border-primary/20 bg-card/50 backdrop-blur">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-mono flex items-center gap-2">
+                <Search className="w-4 h-4 text-primary" />
+                Afdelingen
+                {selectedDepts.size > 0 && (
+                  <Badge variant="outline" className="text-[10px] font-mono ml-1">{selectedDepts.size} geselecteerd</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin" data-testid="dept-scroll">
+                {AMC_DEPARTMENTS.map(dept => {
+                  const isSelected = selectedDepts.has(dept.id);
+                  const acuteCount = dept.acuut.length;
+                  const stdCount = dept.standaard.length;
+                  return (
+                    <button
+                      key={dept.id}
+                      data-testid={`dept-${dept.id}`}
+                      onClick={() => toggleDept(dept.id)}
+                      className={`flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-lg border transition-all text-center min-w-[100px] ${
+                        isSelected
+                          ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/30"
+                          : "border-border/30 text-muted-foreground hover:text-foreground hover:border-border/60"
+                      }`}
+                    >
+                      <span className="text-lg">{dept.icon}</span>
+                      <span className="text-[10px] font-mono font-medium leading-tight">{dept.name}</span>
+                      <div className="flex gap-1 mt-0.5">
+                        <span className="text-[9px] font-mono px-1 rounded bg-muted/20">{stdCount} std</span>
+                        {acuteCount > 0 && (
+                          <span className="text-[9px] font-mono px-1 rounded bg-red-500/15 text-red-400">{acuteCount} acuut</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedDepts.size > 0 && (
+                <div className="mt-3 border-t border-border/20 pt-2">
+                  <div className="flex flex-wrap gap-1">
+                    {AMC_DEPARTMENTS.filter(d => selectedDepts.has(d.id)).map(dept => (
+                      <div key={dept.id} className="text-[10px] font-mono">
+                        <span className="text-muted-foreground">{dept.icon} {dept.name}:</span>{" "}
+                        {dept.standaard.map((s, i) => (
+                          <span key={i} className="text-foreground/70">{s.label}{i < dept.standaard.length - 1 ? ", " : ""}</span>
+                        ))}
+                        {dept.acuut.length > 0 && (
+                          <>
+                            {" "}
+                            {dept.acuut.map((a, i) => (
+                              <span key={i} className="text-red-400">{a.label}{i < dept.acuut.length - 1 ? ", " : ""}</span>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <Button
-                    data-testid="button-template-amc"
-                    variant="outline"
-                    size="sm"
-                    className="font-mono text-xs border-primary/40 hover:bg-primary/10"
-                    onClick={() => {
-                      const t = templateAMC();
-                      setManualName(t.name);
-                      setManualDescription(t.description);
-                      setManualRules(t.rules);
-                      setManualCategories(t.categories);
-                    }}
-                  >
-                    <FileText className="w-3 h-3 mr-1.5" />
-                    Academisch Medisch Centrum
-                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="border-primary/20 bg-card/50 backdrop-blur">
             <CardHeader className="pb-3">
