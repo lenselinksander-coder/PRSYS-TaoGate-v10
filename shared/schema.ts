@@ -52,6 +52,7 @@ export const ingestMetaSchema = z.object({
   researchedAt: z.string(),
   model: z.string(),
   gaps: z.array(z.string()).optional(),
+  sourceText: z.string().optional(),
 });
 
 export type IngestMeta = z.infer<typeof ingestMetaSchema>;

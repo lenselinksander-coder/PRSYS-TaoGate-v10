@@ -1,29 +1,6 @@
-const PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions";
-const MODEL = "llama-3.1-sonar-small-128k-online";
+import OpenAI from "openai";
 
-interface PerplexityMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
-
-interface PerplexityResponse {
-  id: string;
-  model: string;
-  citations?: string[];
-  choices: {
-    index: number;
-    finish_reason: string;
-    message: {
-      role: string;
-      content: string;
-    };
-  }[];
-  usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
+const MODEL = "sonar";
 
 export interface ResearchResult {
   content: string;
@@ -32,16 +9,26 @@ export interface ResearchResult {
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
-export async function researchTopic(query: string): Promise<ResearchResult> {
+function getClient(): OpenAI {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) {
     throw new Error("PERPLEXITY_API_KEY is not configured");
   }
+  return new OpenAI({
+    apiKey,
+    baseURL: "https://api.perplexity.ai",
+  });
+}
 
-  const messages: PerplexityMessage[] = [
-    {
-      role: "system",
-      content: `Je bent een onderzoeksassistent voor ORFHEUSS, een governance-systeem voor organisaties. 
+export async function researchTopic(query: string): Promise<ResearchResult> {
+  const client = getClient();
+
+  const response = await client.chat.completions.create({
+    model: MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `Je bent een onderzoeksassistent voor ORFHEUSS, een governance-systeem voor organisaties. 
 Je taak is bronnen zoeken en gestructureerde informatie leveren over regelgeving, risico's en compliance.
 
 Antwoord ALTIJD in het Nederlands.
@@ -63,44 +50,28 @@ Per gevonden regel/richtlijn:
 
 ## Ontbrekende Informatie
 Wat is nog onduidelijk of niet gevonden? Dit worden de "gaps" in de scope.`
-    },
-    {
-      role: "user",
-      content: query
-    }
-  ];
+      },
+      {
+        role: "user",
+        content: query
+      }
+    ],
+    temperature: 0.2,
+    top_p: 0.9,
+    stream: false,
+  } as any);
 
-  const response = await fetch(PERPLEXITY_API_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.2,
-      top_p: 0.9,
-      return_images: false,
-      return_related_questions: false,
-      stream: false,
-      presence_penalty: 0,
-      frequency_penalty: 1,
-    }),
-  });
+  const raw = response as any;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Perplexity API error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json() as PerplexityResponse;
-  
   return {
-    content: data.choices[0]?.message?.content || "",
-    citations: data.citations || [],
-    model: data.model,
-    usage: data.usage,
+    content: response.choices[0]?.message?.content || "",
+    citations: raw.citations || [],
+    model: response.model,
+    usage: {
+      prompt_tokens: response.usage?.prompt_tokens || 0,
+      completion_tokens: response.usage?.completion_tokens || 0,
+      total_tokens: response.usage?.total_tokens || 0,
+    },
   };
 }
 
@@ -140,17 +111,15 @@ export async function extractScopeFromResearch(
   researchContent: string,
   citations: string[]
 ): Promise<ExtractionResult> {
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    throw new Error("PERPLEXITY_API_KEY is not configured");
-  }
-
+  const client = getClient();
   const citationsList = citations.map((c, i) => `[${i + 1}] ${c}`).join("\n");
 
-  const messages: PerplexityMessage[] = [
-    {
-      role: "system",
-      content: `Je bent een scope-extractie engine voor ORFHEUSS. Je ontvangt onderzoeksresultaten en zet deze om naar gestructureerde scope-objecten.
+  const response = await client.chat.completions.create({
+    model: MODEL,
+    messages: [
+      {
+        role: "system",
+        content: `Je bent een scope-extractie engine voor ORFHEUSS. Je ontvangt onderzoeksresultaten en zet deze om naar gestructureerde scope-objecten.
 
 BELANGRIJK: Antwoord UITSLUITEND met een geldig JSON object. Geen markdown, geen uitleg, alleen JSON.
 
@@ -196,10 +165,10 @@ REGELS:
 - PASS = toegestaan
 - layer: EU voor Europese wetgeving, NATIONAL voor nationale wetten, REGIONAL voor provinciale regels, MUNICIPAL voor gemeentelijke regels
 - qTriad: Mens×Mens = frictie tussen mensen, Mens×Systeem = frictie tussen mens en technologie/proces, Systeem×Systeem = frictie tussen systemen onderling`
-    },
-    {
-      role: "user",
-      content: `Onderzoeksvraag: "${query}"
+      },
+      {
+        role: "user",
+        content: `Onderzoeksvraag: "${query}"
 
 Onderzoeksresultaten:
 ${researchContent}
@@ -208,35 +177,14 @@ Beschikbare bronnen:
 ${citationsList}
 
 Zet dit om naar een scope JSON object.`
-    }
-  ];
+      }
+    ],
+    temperature: 0.1,
+    top_p: 0.9,
+    stream: false,
+  } as any);
 
-  const response = await fetch(PERPLEXITY_API_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.1,
-      top_p: 0.9,
-      return_images: false,
-      return_related_questions: false,
-      stream: false,
-      presence_penalty: 0,
-      frequency_penalty: 1,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Perplexity API error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json() as PerplexityResponse;
-  const content = data.choices[0]?.message?.content || "{}";
+  const content = response.choices[0]?.message?.content || "{}";
 
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {

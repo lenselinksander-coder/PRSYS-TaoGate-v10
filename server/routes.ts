@@ -284,7 +284,7 @@ export async function registerRoutes(
           query: parsed.data.query,
           citations: parsed.data.citations,
           researchedAt: new Date().toISOString(),
-          model: "llama-3.1-sonar-small-128k-online",
+          model: "sonar",
           gaps: extraction.gaps,
         },
       });
@@ -293,6 +293,65 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Draft creation error:", err);
       return res.status(502).json({ error: err.message || "Draft creation failed" });
+    }
+  });
+
+  const manualDraftSchema = z.object({
+    name: z.string().min(1),
+    description: z.string().optional().default(""),
+    rules: z.array(z.object({
+      ruleId: z.string(),
+      layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
+      domain: z.string(),
+      title: z.string(),
+      description: z.string(),
+      action: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
+      overridesLowerLayers: z.boolean().optional().default(false),
+      source: z.string().optional().default(""),
+      sourceUrl: z.string().optional().default(""),
+      article: z.string().optional().default(""),
+      citation: z.string().optional().default(""),
+      qTriad: z.enum(["Mens×Mens", "Mens×Systeem", "Systeem×Systeem"]).optional(),
+    })).optional().default([]),
+    categories: z.array(z.object({
+      name: z.string(),
+      label: z.string(),
+      status: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
+      escalation: z.string().nullable().optional().default(null),
+      keywords: z.array(z.string()).optional().default([]),
+    })).optional().default([]),
+    sourceText: z.string().optional().default(""),
+    sourceUrls: z.array(z.string()).optional().default([]),
+  });
+
+  app.post("/api/ingest/manual-draft", async (req, res) => {
+    const parsed = manualDraftSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+      const data = parsed.data;
+      const scope = await storage.createScope({
+        name: data.name,
+        description: data.description,
+        status: "DRAFT",
+        categories: data.categories,
+        rules: data.rules,
+        documents: [],
+        ingestMeta: {
+          query: `Handmatig: ${data.name}`,
+          citations: data.sourceUrls,
+          researchedAt: new Date().toISOString(),
+          model: "manual",
+          gaps: [],
+          sourceText: data.sourceText,
+        },
+      });
+
+      return res.status(201).json(scope);
+    } catch (err: any) {
+      console.error("Manual draft creation error:", err);
+      return res.status(500).json({ error: err.message || "Draft creation failed" });
     }
   });
 
