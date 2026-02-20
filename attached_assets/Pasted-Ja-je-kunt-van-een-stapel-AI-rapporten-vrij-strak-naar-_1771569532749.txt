@@ -1,0 +1,187 @@
+Ja — je kunt van “een stapel AI-rapporten” vrij strak naar een scopeset én naar een PRSYS-pipeline komen, zolang je twee dingen bewaakt:
+	1.	Scopeset = afbakening + beslisregels (wat valt er wél/niet onder, en wanneer blokkeren we)
+	2.	PRSYS = mechanische evaluatie van druk/tempo/overdracht (niet “waarheid”, niet “cultuuradvies”, maar overload/risico-envelop).
+
+Hieronder staat een werkbaar patroon dat aansluit op jouw canon: frictie als informatie en eerst lokaliseren waar frictie leeft (Mens×Mens, Mens×Systeem, Systeem×Systeem).  ￼ + de Externe Werkplaats als “sluis” voor drukverlaging/adem terug.  ￼
+
+⸻
+
+1) Van rapporten naar scopeset: de “Scope-Extractie” (6 velden)
+
+Maak per rapport (of per hoofdstuk/sectie) één scope-kaart met deze velden:
+
+A. Context (Waar gaat dit over?)
+	•	Domein (zorg/onderwijs/HR/veiligheid/financieel)
+	•	Proces/keten (triage, intake, fraude-detectie, advies, selectie, etc.)
+	•	Actoren (rollen, besluitnemers, leveranciers)
+
+B. Object (Wat wordt er beoordeeld/beslist?)
+	•	Output type: advies / classificatie / score / triage / generatieve tekst / workflow-automatisering
+
+C. Grenzen (Wat valt expliciet buiten scope?)
+	•	Uitgesloten use-cases
+	•	Uitgesloten databronnen
+	•	Uitgesloten beslissingen (bv. “geen automatische afwijzing”)
+
+D. Regels (Pass/Block + redenen)
+	•	PASS criteria (minimale eisen)
+	•	BLOCK criteria (harde stop)
+	•	ESCALATE criteria (menselijke review / governance)
+
+E. Bewijs (Wat moet aantoonbaar zijn?)
+	•	Documenten/artefacts: DPIA, modelkaart, logging, incidentproces, human-in-the-loop, etc.
+
+F. PRSYS-mapping (mechanische parameters)
+	•	τ (torsion/beslistorque)
+	•	ω (tempo/cadans)
+	•	TI (transfer integrity / context-overdracht)
+
+Dit is precies de Q-Lab beweging: eerst lokaliseren van frictie, dan decoderen naar kernconflict/risico, pas dan opties.  ￼
+
+⸻
+
+2) De scopeset als invulbaar format (YAML)
+
+Gebruik dit als jouw “scope object” (één per rapport/sectie/use-case). Dit is meteen geschikt om door je Replit-agent te laten valideren.
+
+scope_id: "AI-RPT-2026-001"
+title: "Triage ondersteuning SEH"
+source:
+  report_title: "Naam rapport"
+  section: "Hoofdstuk 3.2"
+context:
+  domain: "zorg"
+  process: ["SEH triage", "IC doorplaatsing"]
+  actors:
+    - role: "SEH-arts"
+      responsibility: "eindbesluit"
+    - role: "data scientist"
+      responsibility: "modelbeheer"
+    - role: "leverancier"
+      responsibility: "modelupdate/monitoring"
+object:
+  system_type: "predictive model"
+  output: "risicoscore + uitleg"
+  decision_impact: "hoog"
+boundaries:
+  out_of_scope:
+    - "autonome afwijzing"
+    - "profilering buiten klinische noodzaak"
+rules:
+  pass:
+    - id: "P1"
+      statement: "Eindbesluit blijft bij bevoegde professional"
+      evidence: ["beleid_human_override.md"]
+    - id: "P2"
+      statement: "Logging & audittrail aanwezig"
+      evidence: ["logging_spec.pdf"]
+  block:
+    - id: "B1"
+      statement: "Systeem kan automatisch zorg weigeren zonder menselijke bevestiging"
+      evidence_required: ["workflow_diagram.mmd"]
+    - id: "B2"
+      statement: "Geen incident response / monitoring"
+      evidence_required: ["incident_process.md"]
+  escalate:
+    - id: "E1"
+      statement: "Onvoldoende uitlegbaarheid bij hoog risico uitkomst"
+      to: ["medisch_ethiek_board", "CISO"]
+evidence_pack:
+  required:
+    - "model_card"
+    - "data_sheet"
+    - "DPIA"
+    - "monitoring_plan"
+prsys:
+  tau: 0.8     # besliskracht door constraints
+  omega: 0.7   # tempo/interrupts
+  transfer_integrity: 0.5  # overdracht/rolhelderheid
+  notes: "Veel handovers; onduidelijke escalatielijn in nachtdienst."
+
+
+⸻
+
+3) Pipeline naar PRSYS: “Report → Scope → Run → Verdict”
+
+Stap 1 — Ingest & segment
+	•	PDF/Docx → tekst
+	•	Chunk per sectie (kopjes, bullets, tabellen)
+	•	Houd bronverwijzing (pagina/sectie) bij voor traceerbaarheid
+
+Stap 2 — Extract claims → scope-velden
+
+Je agent labelt zinnen als:
+	•	Context (domein, keten, actor)
+	•	Regel (pass/block/escalate)
+	•	Eis/bewijs (artefact)
+	•	Risico-indicator (impact/urgentie)
+
+Stap 3 — Normaliseer naar jouw canon (“Q-triad tagging”)
+
+Tag elke claim als:
+	•	Mens×Mens / Mens×Systeem / Systeem×Systeem  ￼
+Dit is goud, want het verklaart waarom de frictie bestaat.
+
+Stap 4 — PRSYS-mapping (τ, ω, TI)
+
+Vuistregels (snel, bruikbaar):
+	•	τ hoog als: veel constraints, hoge impact, weinig speelruimte, juridische/ethische druk
+	•	ω hoog als: veel interrupts, veel overdrachten, realtime/acute beslissingen
+	•	TI laag als: rolverwarring, slechte handover, ontbrekende escalatiepaden, multi-tool keten zonder eigenaar
+
+Stap 5 — Execute: R = τ × ω × (1/TI)
+	•	Produceer risk envelope + hard fail bij BLOCK (execution stopt)
+	•	Produceer escalatie-object bij ESCALATE (wie, waarom, wat ontbreekt)
+
+Stap 6 — Externe Werkplaats (optioneel maar canonisch)
+
+Als je “blokkeert door druk” maar er is geen kwaadwilligheid: activeer de sluis:
+	•	Doel: druk verlagen zodat vorm niet verstikt, en terug naar cyclus zodra adem terug is  ￼
+
+⸻
+
+4) Wat je nu praktisch kunt doen in Replit (zonder alles te herbouwen)
+
+Minimal viable pipeline (3 endpoints / 3 scripts)
+	1.	ingest_report(file) -> chunks[]
+	2.	chunks_to_scope(chunks) -> scope.yaml
+	3.	run_prsys(scope.yaml) -> verdict.json
+
+Verdict output (voorbeeld)
+
+{
+  "scope_id": "AI-RPT-2026-001",
+  "status": "BLOCK",
+  "blocked_by": ["B1"],
+  "prsys": {
+    "tau": 0.8,
+    "omega": 0.7,
+    "transfer_integrity": 0.5,
+    "R": 1.12
+  },
+  "escalations": [
+    {
+      "id": "E1",
+      "to": ["medisch_ethiek_board", "CISO"],
+      "reason": "uitlegbaarheid onvoldoende bij hoog-impact output",
+      "required_evidence": ["model_card.explainability", "clinical_validation"]
+    }
+  ],
+  "next_action": "Stop execution. Produce evidence checklist + escalation packet."
+}
+
+
+⸻
+
+5) Shortcut: maak eerst één “Master Scopeset” en hang rapporten eraan
+
+Als je veel rapporten hebt, begin niet met 100 scopes. Begin met één master per domein (zorg/onderwijs/etc.) met:
+	•	standaard PASS/BLOCK/ESCALATE regels
+	•	standaard evidence pack
+	•	standaard τ/ω/TI ranges
+
+En laat elk rapport alleen deltas toevoegen (wat is afwijkend?).
+
+⸻
+
+Als je wil, kan ik (1) een invulbare scopeset-docx maken (mensvriendelijk) én (2) een machine-readable YAML schema + pass/block/escalate contract voor je PRSYS agent. Je kunt daarna elk rapport in 10–15 minuten omzetten naar een scope-kaart en PRSYS laten draaien.
