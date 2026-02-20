@@ -1,0 +1,210 @@
+Dit is precies goed verwoord door Replit — en het zet meteen de juiste ontwerpvraag neer: waar leg je de grens tussen mens-gestuurde scope-authoring en machine-gestuurde scope-extractie.
+
+Hier is een concreet, bouwbaar ontwerp dat past op je huidige keten (ARGOS → OLYMPIA → ScopeDB → PRSYS verdict), zonder dat je motor hoeft te verbouwen.
+
+⸻
+
+0) Architectuur: voeg één “Ingestielaag” toe als aparte service
+
+Nieuwe laag (vóór je motor): INGEST
+	•	Doel: documenten → traceerbare scope-drafts
+	•	Output: draft scopes + evidence map + citations (page/section anchors)
+
+Bestaande motor blijft heilig:
+	•	ARGOS: classificatie / tags
+	•	OLYMPIA: regels, PASS/BLOCK/ESCALATE
+	•	PRSYS: τ, ω, TI → envelope → verdict
+	•	ScopeDB: scopes als contract
+
+In termen van jouw canon: INTAKE (adem/ma) vóór VORM (regels) vóór DRUK (mechaniek).
+
+⸻
+
+1) Drie dieptes, maar met één consistent contract
+
+Level 1 — Handmatig (nu)
+	•	Jij leest rapport → jij maakt scope.
+	•	PRSYS draait.
+
+✅ Snel, maar niet schaalbaar.
+
+Level 2 — Halfautomatisch (beste “nu”)
+	•	Upload rapport → systeem chunked + labelt → maakt Scope Draft
+	•	Jij doet “human review” (accept/edit/mark-unknown)
+	•	Daarna pas scope “LOCKED” → PRSYS verdict
+
+✅ Snel + veilig + auditbaar.
+
+Level 3 — Volledig automatisch (later)
+	•	Bulk library → scopes + verdicts zonder menselijke check
+	•	Alleen nog sampling/audit
+
+⚠️ Alleen doen als je confidence/guardrails echt volwassen zijn.
+
+Mijn harde advies (technisch, niet normatief): bouw Level 2 als standaard, maar ontwerp je dataflow alsof Level 3 later kan, met dezelfde objecten.
+
+⸻
+
+2) Het kerncontract: “Scope Draft” is een ander object dan “Scope”
+
+Maak expliciet onderscheid in status:
+	•	SCOPE_DRAFT (onvolledig, mag onbekenden bevatten)
+	•	SCOPE_LOCKED (Olympia-waardige scope, geen gaten)
+	•	VERDICT (output van PRSYS)
+
+Status-regel
+	•	PRSYS mag alleen draaien op LOCKED.
+	•	DRAFT kan wél alvast een “preflight” krijgen (wat ontbreekt?).
+
+⸻
+
+3) Datamodel (minimaal, maar toekomstvast)
+
+A) Document
+	•	doc_id, title, source, hash, uploaded_at
+
+B) Chunks
+	•	chunk_id, doc_id
+	•	text
+	•	anchor: {page, section, line_start, line_end} (traceerbaarheid)
+	•	chunk_type (optioneel): paragraph/table/bullet
+
+C) Extractions (labels op chunk-niveau)
+
+Per chunk één of meerdere “extracts”:
+	•	extract_id, chunk_id
+	•	label_type: context | rule_pass | rule_block | rule_escalate | evidence | definition | unknown
+	•	payload (gestructureerd)
+	•	confidence (0–1)
+	•	needs_review (bool)
+
+D) Scope Draft
+	•	draft_id
+	•	derived_from: [doc_id]
+	•	rules[] (pass/block/escalate)
+	•	context
+	•	evidence_pack
+	•	prsys_inputs (τ, ω, TI) als proposed
+	•	gaps[] (wat ontbreekt)
+	•	status: draft
+
+E) Scope Locked
+	•	scope_id
+	•	exacte inhoud + version, locked_by, locked_at
+	•	trace_map: koppelingen naar chunk anchors
+
+⸻
+
+4) Endpoints (Replit-ready)
+
+1) Upload → chunk
+
+POST /ingest/document
+	•	input: file (pdf/docx/txt)
+	•	output: {doc_id, chunks_count}
+
+GET /ingest/document/{doc_id}/chunks
+
+2) Chunk → draft
+
+POST /ingest/document/{doc_id}/extract
+	•	output: {doc_id, extracts_count}
+
+POST /ingest/document/{doc_id}/scope-draft
+	•	output: {draft_id}
+
+3) Review → lock
+
+POST /scopes/{draft_id}/lock
+	•	server checks:
+	•	geen open gaps[]
+	•	alle BLOCK/PASS/ESCALATE regels hebben minimaal 1 evidence anchor
+	•	escalatiepaden hebben “to”-target(s)
+	•	output: {scope_id}
+
+4) Run PRSYS
+
+POST /prsys/run/{scope_id}
+	•	output: verdict.json
+
+⸻
+
+5) Review UI (super simpel, maar effectief)
+
+Je hebt maar 3 schermen nodig:
+	1.	Chunk browser (met page/sectie)
+	2.	Draft scope editor
+	•	Rules: PASS/BLOCK/ESCALATE als kaarten
+	•	Evidence pack checklist
+	•	PRSYS inputs (τ, ω, TI) sliders met toelichting
+	3.	Gaps / Preflight
+	•	“Wat ontbreekt om te locken?”
+
+Dit maakt het menselijk, en voorkomt dat je ingestielaag “stil” gaat hallucineren.
+
+⸻
+
+6) De “Preflight”: jouw safety net (en key differentiator)
+
+Voor lock() doe je een harde validatie:
+
+Preflight checks (voorbeeld)
+	•	Heeft elke BLOCK regel:
+	•	statement
+	•	evidence_required of link naar chunk(s)
+	•	Heeft de scope:
+	•	minimaal 1 context domein/proces
+	•	escalatie-objecten met to en reason
+	•	PRSYS inputs:
+	•	τ/ω/TI aanwezig, of expliciet “unknown” met gap
+
+Resultaat: preflight geeft alleen:
+	•	PASS_TO_LOCK
+	•	FAIL_TO_LOCK + lijst gaps
+
+⸻
+
+7) Mapping naar τ, ω, TI (halfautomatisch zonder geklooi)
+
+Laat de ingestielaag alleen een voorstel doen met rationale:
+	•	τ voorstel o.b.v. “impact + constraints” woorden (klinisch, juridisch, sanctionerend)
+	•	ω voorstel o.b.v. tempo-termen (real-time, acute, 24/7, interrupts)
+	•	TI voorstel o.b.v. overdracht-termen (handover, multi-team, leverancier updates, onduidelijke ownership)
+
+Maar: altijd “review required” totdat jij locked.
+
+⸻
+
+8) Wat je morgen al kunt shippen (MVP in 1 sprint)
+
+MVP scope-ingest (halfautomatisch):
+	•	PDF/TXT ingest
+	•	Chunking op headings + paragrafen
+	•	Extractie met simpele heuristieken (regex + keywords) of LLM (als je dat al hebt)
+	•	Draft scope generator
+	•	Preflight gap checker
+	•	Handmatige lock
+	•	PRSYS run
+
+Als dat staat, kun je daarna pas “slimmer” maken.
+
+⸻
+
+9) Bonus: bulk bibliotheek zonder risico (Level 3-ish, maar veilig)
+
+Laat de pipeline wél bulk draaien, maar produceer alleen:
+	•	SCOPE_DRAFTs
+	•		•	een “top 20 hoogste risico preflight” lijst
+
+Jij reviewt alleen de “hot” gevallen.
+
+⸻
+
+Als je wil: ik kan je nu direct een concrete implementatie-schets geven voor Replit:
+	•	folderstructuur
+	•	dataclasses / pydantic schema’s
+	•	preflight validator
+	•	3 endpoints
+	•	voorbeeld JSON/YAML
+
+Maar ook zonder code: als je bovenstaande objecten en statusregels aanhoudt, heb je een ingestielaag die auditbaar, mens-in-de-lus, en canon-conform is — en je motor (ARGOS/OLYMPIA/PRSYS) blijft schoon.
