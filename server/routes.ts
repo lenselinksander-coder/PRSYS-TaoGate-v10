@@ -1,3 +1,4 @@
+import { clinicalGate } from "./clinicalGate";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -110,29 +111,56 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   app.post("/api/classify", async (req, res) => {
-    const { text, scopeId } = req.body;
-    if (!text || !scopeId) {
-      return res.status(400).json({ error: "text and scopeId required" });
+    try {
+      const { text, scopeId } = req.body as { text?: string; scopeId?: string };
+
+      // 1) input check
+      if (!text || !scopeId) {
+        return res.status(400).json({ error: "text and scopeId required" });
+      }
+
+      // 2) CLINICAL GATE (hard stop voor imperatieven / klinische commands)
+      const gate = clinicalGate(text);
+
+      if (gate.status === "BLOCK" || gate.status === "ESCALATE_HUMAN") {
+        return res.json({
+          status: gate.status,
+          layer: gate.layer,          // "CLINICAL"
+          band: gate.band,
+          pressure: gate.pressure,
+          escalation: gate.escalation,
+          reason: gate.reason,
+          signals: gate.signals,
+        });
+      }
+
+      // 3) scope ophalen pas NA clinical
+      const scope = await storage.getScope(scopeId);
+      if (!scope) return res.status(404).json({ error: "Scope not found" });
+
+      // 4) Normale classificatie met scope
+      const classification = classifyWithScope(text, scope);
+
+      const rules = (scope.rules || []) as ScopeRule[];
+      const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
+      const matchedDomain = availableDomains.find(d => classification.category.toUpperCase().includes(d.toUpperCase()));
+
+      const olympia = resolveOlympiaRules(scope, matchedDomain);
+      return res.json({
+        ...classification,
+        olympiaRuleId: olympia.winningRule?.ruleId || null,
+        olympiaAction: olympia.winningRule?.action || null,
+        olympiaLayer: olympia.winningRule?.layer || null,
+        olympiaRule: olympia.winningRule || null,
+        olympiaHasConflict: olympia.hasConflict,
+        olympiaPressure: olympia.pressure,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: "internal_error",
+        message: err?.message ?? String(err),
+      });
     }
-    const scope = await storage.getScope(scopeId);
-    if (!scope) return res.status(404).json({ error: "Scope not found" });
-
-    const classification = classifyWithScope(text, scope);
-
-    const rules = (scope.rules || []) as ScopeRule[];
-    const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
-    const matchedDomain = availableDomains.find(d => classification.category.toUpperCase().includes(d.toUpperCase()));
-
-    const olympia = resolveOlympiaRules(scope, matchedDomain);
-    return res.json({
-      ...classification,
-      olympiaRuleId: olympia.winningRule?.ruleId || null,
-      olympiaAction: olympia.winningRule?.action || null,
-      olympiaLayer: olympia.winningRule?.layer || null,
-      olympiaRule: olympia.winningRule || null,
-      olympiaHasConflict: olympia.hasConflict,
-      olympiaPressure: olympia.pressure,
-    });
   });
 
   const resolveInputSchema = z.object({
