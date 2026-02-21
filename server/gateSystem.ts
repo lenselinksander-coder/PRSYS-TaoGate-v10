@@ -97,7 +97,12 @@ function financialGate(input: string): GateResult {
   const lower = normalize(input);
   const matched = hits(lower, FINANCIAL_PATTERNS);
 
-  const fraudHits = hits(lower, ["witwassen", "fraude", "sanctie", "insider trading", "marktmanipulatie", "voorkennis", "money laundering", "fraud"]);
+  const fraudHits = hits(lower, [
+    "witwassen", "fraude", "sanctie", "insider trading", "marktmanipulatie",
+    "voorkennis", "money laundering", "fraud", "offshore", "belastingontduiking",
+    "verdachte transactie", "suspicious transaction", "shell company",
+    /verdacht.*overboek/, /verdacht.*betal/,
+  ]);
   if (fraudHits.length > 0) {
     return {
       status: "BLOCK",
