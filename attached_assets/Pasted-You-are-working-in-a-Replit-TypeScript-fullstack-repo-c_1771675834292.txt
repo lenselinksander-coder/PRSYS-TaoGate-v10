@@ -1,0 +1,60 @@
+You are working in a Replit TypeScript fullstack repo (client + server).
+Goal: PATCH FRONTEND so it renders the NEW unified /api/classify response shape for BOTH paths:
+- Clinical Gate early-return
+- EU/Scope classification return
+
+Context (server already updated):
+/api/classify now returns a unified shape:
+{
+  status: "PASS" | "PASS_WITH_TRANSPARENCY" | "ESCALATE_HUMAN" | "BLOCK",
+  olympia: string | null,        // for clinical: band; for EU/scope: ruleId
+  layer: string,                 // "CLINICAL" or "EU" (or other layer)
+  pressure: string | number,     // clinical: "LOW"|"MEDIUM"|"HIGH"|"CRITICAL"; EU: number or "INFINITE"
+  escalation: string | null,
+  reason: string,
+  winningRule: object | null,    // null for clinical
+  signals: object | null         // clinical has signals object; EU may return null
+}
+
+Problem:
+Frontend still expects old fields like:
+- result.olympiaAction
+- result.olympiaPressure
+- result.olympiaLayer
+- etc.
+So when Clinical Gate triggers, UI shows OLYMPIA:-, LAYER:-, PRESSURE: undefined.
+
+Task:
+1) Find the UI that renders the /api/classify result. Search in client for "olympiaAction" and "olympiaPressure".
+   Likely file: client/src/TriagePage.tsx (search results show around line ~304).
+2) Update frontend to use the NEW unified fields:
+   - OLYMPIA display should show result.olympia (string|null) with "-" fallback
+   - LAYER display should show result.layer with "-" fallback
+   - PRESSURE display should show result.pressure with "-" fallback
+   - Escalatie display should show result.escalation with "geen" or "-" fallback
+   - Status uses result.status as before
+   - If winningRule exists, keep existing winning rule block but read from result.winningRule (not old fields)
+   - If signals exists, optionally show a small debug line or keep it silent; but do NOT break UI if null.
+3) Remove/stop using the old olympia* fields in rendering logic. Keep backwards compatibility ONLY if necessary:
+   If you must support both shapes temporarily, implement a small mapping function:
+     const olympia = result.olympia ?? result.olympiaRuleId ?? result.olympiaAction ?? "-";
+     const layer = result.layer ?? result.olympiaLayer ?? "-";
+     const pressure = result.pressure ?? result.olympiaPressure ?? "-";
+     const escalation = result.escalation ?? result.escalate ?? "geen";
+   But prefer migrating fully to the new shape.
+4) Update TypeScript types for the classify response on the client:
+   - Define an interface/type for the new response shape.
+   - Use it in state and rendering (avoid any where possible).
+5) Verify in Preview:
+   - Example observation text ("Patiënt onrustig...") should PASS and show EU/Scope fields correctly.
+   - Example imperative ("Start direct beademing zonder overleg.") should STOP via Clinical Gate and show:
+       status: BLOCK or ESCALATE_HUMAN
+       olympia: e.g. "CLINICAL_OVERRIDE" (or band)
+       layer: "CLINICAL"
+       pressure: "CRITICAL"
+       escalation: "HUMAN_IC_TEAM"
+     and NO undefined values.
+6) Make a checkpoint after successful compile + preview.
+Deliverables:
+- Commit-like summary: which files changed and what exactly was replaced.
+- Ensure LSP / TypeScript errors are clean.

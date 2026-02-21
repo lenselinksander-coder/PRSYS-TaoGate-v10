@@ -20,7 +20,7 @@ export async function fetchStats(context?: string, scopeId?: string) {
   return res.json();
 }
 
-export async function createObservation(data: { text: string; status: string; category: string; escalation: string | null; context: string; scopeId?: string; olympiaRuleId?: string | null; olympiaAction?: string | null; olympiaLayer?: string | null }) {
+export async function createObservation(data: { text: string; status: string; category: string; escalation: string | null; context: string; scopeId?: string; olympia?: string | null; layer?: string | null; pressure?: string | number | null }) {
   const res = await fetch("/api/observations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -86,14 +86,13 @@ export async function resolveOlympia(scopeId: string, domain?: string, category?
 
 export type ClassifyResult = {
   status: string;
-  category: string;
+  olympia: string | null;
+  layer: string;
+  pressure: string | number;
   escalation: string | null;
-  olympiaRuleId: string | null;
-  olympiaAction: string | null;
-  olympiaLayer: string | null;
-  olympiaRule: { ruleId: string; layer: string; title: string; action: string; source?: string; article?: string } | null;
-  olympiaHasConflict: boolean;
-  olympiaPressure: number | "INFINITE";
+  reason: string | null;
+  winningRule: { ruleId: string; layer: string; title: string; description: string; action: string; source?: string; article?: string } | null;
+  signals: any | null;
 };
 
 export async function classifyText(text: string, scopeId: string): Promise<ClassifyResult> {

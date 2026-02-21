@@ -17,15 +17,13 @@ type ScopeLite = {
 
 type ClassifyResponse = {
   status: GateDecision;
-  category: string;
+  olympia: string | null;
+  layer: string;
+  pressure: string | number;
   escalation: string | null;
-
-  olympiaRuleId: string | null;
-  olympiaAction: GateDecision | null;
-  olympiaLayer: "EU" | "NATIONAL" | "REGIONAL" | "MUNICIPAL" | null;
-  olympiaHasConflict: boolean;
-  olympiaPressure: number | "INFINITE";
-  olympiaRule: any | null;
+  reason: string | null;
+  winningRule: any | null;
+  signals: any | null;
 };
 
 function badgeTone(decision: GateDecision) {
@@ -284,7 +282,7 @@ export default function TriagePage() {
                           {tone.label}
                         </span>
 
-                        <span style={{ fontSize: 15, fontWeight: 800, color: "#e9f3f8" }}>{result.category}</span>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: "#e9f3f8" }}>{result.olympia ?? "-"}</span>
                       </div>
 
                       <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
@@ -301,13 +299,13 @@ export default function TriagePage() {
                         opacity: 0.8,
                       }}
                     >
-                      <div>OLYMPIA: {result.olympiaAction ?? "-"}</div>
-                      <div>LAYER: {result.olympiaLayer ?? "-"}</div>
-                      <div>PRESSURE: {String(result.olympiaPressure)}</div>
+                      <div>OLYMPIA: {result.olympia ?? "-"}</div>
+                      <div>LAYER: {result.layer ?? "-"}</div>
+                      <div>PRESSURE: {String(result.pressure ?? "-")}</div>
                     </div>
                   </div>
 
-                  {result.olympiaRule && (
+                  {result.reason && (
                     <div
                       style={{
                         marginTop: 12,
@@ -318,16 +316,14 @@ export default function TriagePage() {
                       }}
                     >
                       <div style={{ fontSize: 12, opacity: 0.75, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                        Olympia winnende regel
+                        {result.winningRule ? "Olympia winnende regel" : "Reden"}
                       </div>
                       <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, color: "#e9f3f8" }}>
-                        {result.olympiaRule.title ?? result.olympiaRuleId ?? "Rule"}
+                        {result.winningRule?.title ?? result.olympia ?? "Rule"}
                       </div>
-                      {result.olympiaRule.description && (
-                        <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85, lineHeight: 1.45 }}>
-                          {result.olympiaRule.description}
-                        </div>
-                      )}
+                      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85, lineHeight: 1.45 }}>
+                        {result.reason}
+                      </div>
                     </div>
                   )}
                 </>
