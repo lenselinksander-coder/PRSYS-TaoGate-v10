@@ -7,15 +7,28 @@ import type { Scope, GateDecision, ScopeRule, RuleLayer } from "@shared/schema";
 import { z } from "zod";
 import { researchTopic, extractScopeFromResearch, preflightCheck } from "./perplexity";
 
-function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null } {
+function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null; reason: string | null } {
   const lower = text.toLowerCase();
   const priorityOrder: GateDecision[] = ["BLOCK", "ESCALATE_REGULATORY", "ESCALATE_HUMAN", "PASS_WITH_TRANSPARENCY", "PASS"];
+
+  const reasonMap: Record<string, string> = {
+    BLOCK: "Classificatie geblokt — menselijke beoordeling vereist.",
+    ESCALATE_REGULATORY: "Regulatoire escalatie vereist — toezichthouder raadplegen.",
+    ESCALATE_HUMAN: "Escalatie naar mens vereist — beoordeling door specialist.",
+    PASS_WITH_TRANSPARENCY: "Doorgelaten met transparantieverplichting.",
+  };
 
   for (const decision of priorityOrder) {
     const cats = scope.categories.filter(c => c.status === decision);
     for (const cat of cats) {
       if (cat.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
-        return { status: cat.status, category: cat.name, escalation: cat.escalation };
+        let reason: string | null = null;
+        if (decision !== "PASS") {
+          reason = cat.escalation
+            ? `${cat.label ?? cat.name} — escaleer naar ${cat.escalation}.`
+            : reasonMap[decision] ?? null;
+        }
+        return { status: cat.status, category: cat.name, escalation: cat.escalation, reason };
       }
     }
   }
@@ -25,6 +38,7 @@ function classifyWithScope(text: string, scope: Scope): { status: string; catego
     status: "PASS",
     category: defaultPass?.name || "Observation",
     escalation: null,
+    reason: null,
   };
 }
 
@@ -153,7 +167,7 @@ export async function registerRoutes(
         layer: olympia.winningRule?.layer ?? "EU",
         pressure: olympia.pressure === "INFINITE" ? "CRITICAL" : "NORMAL",
         escalation: classification.escalation ?? null,
-        reason: olympia.winningRule?.description ?? null,
+        reason: classification.reason ?? (classification.status !== "PASS" ? (olympia.winningRule?.description ?? null) : null),
         winningRule: olympia.winningRule ?? null,
         signals: null,
       });

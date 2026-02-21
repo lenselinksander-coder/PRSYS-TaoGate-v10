@@ -190,6 +190,7 @@ export default function TriagePage() {
             </div>
 
             <button
+              data-testid="button-analyze"
               onClick={onAnalyze}
               disabled={busy || loadingScope}
               style={{
@@ -208,7 +209,33 @@ export default function TriagePage() {
             </button>
           </div>
 
+          <div
+            data-testid="handleiding-block"
+            style={{
+              marginTop: 14,
+              padding: "12px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(180,240,255,0.12)",
+              background: "rgba(180,240,255,0.04)",
+              fontSize: 12,
+              lineHeight: 1.65,
+              color: "rgba(215,230,238,0.72)",
+            }}
+          >
+            <div style={{ fontWeight: 700, color: "#b4f0ff", marginBottom: 6, letterSpacing: "0.06em", textTransform: "uppercase", fontSize: 11 }}>
+              Handleiding (Operator)
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              <li>Typ een waarneming (feitelijk). Geen opdrachten.</li>
+              <li>Voorbeeld PASS: <span style={{ color: "#b7ffe9" }}>"Patiënt is onrustig, ademhaling versnelt."</span></li>
+              <li>Voorbeeld ESCALATE: <span style={{ color: "#ffe7a3" }}>"Patiëntgegevens aan ouders meegeven."</span> (privacy)</li>
+              <li>Als status ≠ PASS: stop, volg escalatie (DPO / Behandelaar).</li>
+              <li>Deze console voert geen acties uit; het classificeert en routeert.</li>
+            </ul>
+          </div>
+
           <textarea
+            data-testid="input-observation"
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Voorbeeld: 'Patiënt onrustig; ademhaling versnelt; saturatie daalt sinds 10 minuten.'"
@@ -265,6 +292,7 @@ export default function TriagePage() {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                         <span
+                          data-testid="status-badge"
                           style={{
                             padding: "6px 10px",
                             borderRadius: 999,
@@ -282,11 +310,11 @@ export default function TriagePage() {
                           {tone.label}
                         </span>
 
-                        <span style={{ fontSize: 15, fontWeight: 800, color: "#e9f3f8" }}>{result.olympia ?? "-"}</span>
+                        <span data-testid="text-olympia" style={{ fontSize: 15, fontWeight: 800, color: "#e9f3f8" }}>{result.olympia ?? "-"}</span>
                       </div>
 
                       <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
-                        Escalatie: <span style={{ color: "#e9f3f8" }}>{result.escalation ?? "geen"}</span>
+                        Escalatie: <span data-testid="text-escalation" style={{ color: "#e9f3f8" }}>{result.escalation ?? "geen"}</span>
                       </div>
                     </div>
 
@@ -299,29 +327,32 @@ export default function TriagePage() {
                         opacity: 0.8,
                       }}
                     >
-                      <div>OLYMPIA: {result.olympia ?? "-"}</div>
-                      <div>LAYER: {result.layer ?? "-"}</div>
-                      <div>PRESSURE: {String(result.pressure ?? "-")}</div>
+                      <div data-testid="text-olympia-label">OLYMPIA: {result.olympia ?? "-"}</div>
+                      <div data-testid="text-layer">LAYER: {result.layer ?? "-"}</div>
+                      <div data-testid="text-pressure">PRESSURE: {String(result.pressure ?? "-")}</div>
                     </div>
                   </div>
 
                   {result.reason && (
                     <div
+                      data-testid="reason-block"
                       style={{
                         marginTop: 12,
                         padding: 12,
                         borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(0,0,0,0.22)",
+                        border: `1px solid ${tone.bd}44`,
+                        background: `${tone.bg}88`,
                       }}
                     >
                       <div style={{ fontSize: 12, opacity: 0.75, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                         {result.winningRule ? "Olympia winnende regel" : "Reden"}
                       </div>
-                      <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, color: "#e9f3f8" }}>
-                        {result.winningRule?.title ?? result.olympia ?? "Rule"}
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85, lineHeight: 1.45 }}>
+                      {result.winningRule?.title && (
+                        <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800, color: "#e9f3f8" }}>
+                          {result.winningRule.title}
+                        </div>
+                      )}
+                      <div data-testid="text-reason" style={{ marginTop: 6, fontSize: 13, color: tone.fg, opacity: 0.9, lineHeight: 1.45 }}>
                         {result.reason}
                       </div>
                     </div>

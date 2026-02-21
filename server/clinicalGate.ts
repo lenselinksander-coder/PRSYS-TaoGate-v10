@@ -213,7 +213,7 @@ export function clinicalGate(input: string): ClinicalGateResult {
     return {
       status: "PASS_WITH_TRANSPARENCY",
       layer: "CLINICAL",
-      band: "CLINICAL__OBSERVATION_OK",
+      band: "CLINICAL_OBSERVATION_OK",
       pressure: "LOW",
       escalation: null,
       reason: "Lege of minimale invoer: geen klinische opdracht gedetecteerd.",
