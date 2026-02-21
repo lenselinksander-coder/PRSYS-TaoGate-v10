@@ -4,10 +4,23 @@ export async function seedDefaultScopes() {
   const existing = await storage.getDefaultScope();
   if (existing) return;
 
+  const orgs = await storage.getOrganizations();
+  let defaultOrg = orgs.find(o => o.slug === "orfheuss-demo");
+  if (!defaultOrg) {
+    defaultOrg = await storage.createOrganization({
+      name: "ORFHEUSS Demo",
+      slug: "orfheuss-demo",
+      description: "Standaard demonstratie-organisatie met klinisch gate-profiel (EU AI Act + IC governance)",
+      sector: "healthcare",
+      gateProfile: "CLINICAL",
+    });
+  }
+
   await storage.createScope({
     name: "LEYEN",
     description: "EU AI Act + IC klinische governance scope",
     status: "LOCKED",
+    orgId: defaultOrg.id,
     categories: [
       {
         name: "EU_AI_PROHIBITED",

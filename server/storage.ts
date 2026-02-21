@@ -1,6 +1,13 @@
-import { type Observation, type InsertObservation, observations, type Scope, type InsertScope, scopes } from "@shared/schema";
+import {
+  type Observation, type InsertObservation, observations,
+  type Scope, type InsertScope, scopes,
+  type Organization, type InsertOrganization, organizations,
+  type Connector, type InsertConnector, connectors,
+  type Intent, type InsertIntent, intents,
+} from "@shared/schema";
 import { db } from "./db";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, sql, and } from "drizzle-orm";
+import crypto from "crypto";
 
 export interface IStorage {
   createObservation(observation: InsertObservation): Promise<Observation>;
@@ -9,10 +16,30 @@ export interface IStorage {
 
   createScope(scope: InsertScope): Promise<Scope>;
   getScopes(): Promise<Scope[]>;
+  getScopesByOrg(orgId: string): Promise<Scope[]>;
   getScope(id: string): Promise<Scope | undefined>;
   updateScope(id: string, scope: Partial<InsertScope>): Promise<Scope | undefined>;
   deleteScope(id: string): Promise<boolean>;
   getDefaultScope(): Promise<Scope | undefined>;
+
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  getOrganizations(): Promise<Organization[]>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationBySlug(slug: string): Promise<Organization | undefined>;
+  updateOrganization(id: string, org: Partial<InsertOrganization>): Promise<Organization | undefined>;
+  deleteOrganization(id: string): Promise<boolean>;
+
+  createConnector(connector: InsertConnector): Promise<Connector>;
+  getConnectors(orgId?: string): Promise<Connector[]>;
+  getConnector(id: string): Promise<Connector | undefined>;
+  getConnectorByApiKey(apiKey: string): Promise<Connector | undefined>;
+  updateConnector(id: string, connector: Partial<InsertConnector>): Promise<Connector | undefined>;
+  deleteConnector(id: string): Promise<boolean>;
+  touchConnector(id: string): Promise<void>;
+
+  createIntent(intent: InsertIntent): Promise<Intent>;
+  getIntents(orgId?: string, limit?: number): Promise<Intent[]>;
+  getIntentStats(orgId?: string): Promise<{ total: number; passed: number; blocked: number; escalated: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -54,6 +81,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(scopes).orderBy(desc(scopes.createdAt));
   }
 
+  async getScopesByOrg(orgId: string): Promise<Scope[]> {
+    return db.select().from(scopes).where(eq(scopes.orgId!, orgId)).orderBy(desc(scopes.createdAt));
+  }
+
   async getScope(id: string): Promise<Scope | undefined> {
     const [result] = await db.select().from(scopes).where(eq(scopes.id, id));
     return result;
@@ -75,6 +106,104 @@ export class DatabaseStorage implements IStorage {
   async getDefaultScope(): Promise<Scope | undefined> {
     const [result] = await db.select().from(scopes).where(eq(scopes.isDefault!, "true"));
     return result;
+  }
+
+  // ── Organizations ──────────────────────────────────────
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const [result] = await db.insert(organizations).values(org).returning();
+    return result;
+  }
+
+  async getOrganizations(): Promise<Organization[]> {
+    return db.select().from(organizations).orderBy(desc(organizations.createdAt));
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [result] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return result;
+  }
+
+  async getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+    const [result] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+    return result;
+  }
+
+  async updateOrganization(id: string, org: Partial<InsertOrganization>): Promise<Organization | undefined> {
+    const [result] = await db.update(organizations)
+      .set(org)
+      .where(eq(organizations.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteOrganization(id: string): Promise<boolean> {
+    const result = await db.delete(organizations).where(eq(organizations.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // ── Connectors ─────────────────────────────────────────
+  async createConnector(connector: InsertConnector): Promise<Connector> {
+    const apiKey = `orf_${crypto.randomBytes(24).toString("hex")}`;
+    const [result] = await db.insert(connectors).values({ ...connector, apiKey }).returning();
+    return result;
+  }
+
+  async getConnectors(orgId?: string): Promise<Connector[]> {
+    if (orgId) {
+      return db.select().from(connectors).where(eq(connectors.orgId, orgId)).orderBy(desc(connectors.createdAt));
+    }
+    return db.select().from(connectors).orderBy(desc(connectors.createdAt));
+  }
+
+  async getConnector(id: string): Promise<Connector | undefined> {
+    const [result] = await db.select().from(connectors).where(eq(connectors.id, id));
+    return result;
+  }
+
+  async getConnectorByApiKey(apiKey: string): Promise<Connector | undefined> {
+    const [result] = await db.select().from(connectors)
+      .where(and(eq(connectors.apiKey, apiKey), eq(connectors.status, "ACTIVE")));
+    return result;
+  }
+
+  async updateConnector(id: string, connector: Partial<InsertConnector>): Promise<Connector | undefined> {
+    const [result] = await db.update(connectors)
+      .set(connector)
+      .where(eq(connectors.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteConnector(id: string): Promise<boolean> {
+    const result = await db.delete(connectors).where(eq(connectors.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async touchConnector(id: string): Promise<void> {
+    await db.update(connectors).set({ lastUsedAt: new Date() }).where(eq(connectors.id, id));
+  }
+
+  // ── Intents (audit log) ────────────────────────────────
+  async createIntent(intent: InsertIntent): Promise<Intent> {
+    const [result] = await db.insert(intents).values(intent).returning();
+    return result;
+  }
+
+  async getIntents(orgId?: string, limit = 100): Promise<Intent[]> {
+    if (orgId) {
+      return db.select().from(intents).where(eq(intents.orgId!, orgId)).orderBy(desc(intents.createdAt)).limit(limit);
+    }
+    return db.select().from(intents).orderBy(desc(intents.createdAt)).limit(limit);
+  }
+
+  async getIntentStats(orgId?: string): Promise<{ total: number; passed: number; blocked: number; escalated: number }> {
+    const all = await this.getIntents(orgId, 1000);
+    return {
+      total: all.length,
+      passed: all.filter(i => i.decision === "PASS" || i.decision === "PASS_WITH_TRANSPARENCY").length,
+      blocked: all.filter(i => i.decision === "BLOCK").length,
+      escalated: all.filter(i => i.decision === "ESCALATE_HUMAN" || i.decision === "ESCALATE_REGULATORY").length,
+    };
   }
 }
 

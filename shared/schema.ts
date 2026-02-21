@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -57,11 +57,47 @@ export const ingestMetaSchema = z.object({
 
 export type IngestMeta = z.infer<typeof ingestMetaSchema>;
 
+export const gateProfiles = ["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"] as const;
+export type GateProfile = typeof gateProfiles[number];
+
+export const orgSectors = [
+  "healthcare", "finance", "education", "government", "technology",
+  "legal", "energy", "transport", "retail", "manufacturing", "other"
+] as const;
+export type OrgSector = typeof orgSectors[number];
+
+export const connectorTypes = ["AI_AGENT", "DATA_SOURCE", "WEBHOOK"] as const;
+export type ConnectorType = typeof connectorTypes[number];
+
+export const connectorStatuses = ["ACTIVE", "INACTIVE", "REVOKED"] as const;
+export type ConnectorStatus = typeof connectorStatuses[number];
+
+// ── Organizations ──────────────────────────────────────────
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  sector: text("sector").notNull().default("other"),
+  gateProfile: text("gate_profile").notNull().default("GENERAL"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+
+// ── Scopes ─────────────────────────────────────────────────
 export const scopes = pgTable("scopes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
   status: text("status").notNull().default("LOCKED"),
+  orgId: varchar("org_id"),
   categories: jsonb("categories").notNull().$type<ScopeCategory[]>(),
   documents: jsonb("documents").notNull().$type<ScopeDocument[]>().default([]),
   rules: jsonb("rules").notNull().$type<ScopeRule[]>().default([]),
@@ -86,6 +122,7 @@ export const insertScopeSchema = createInsertSchema(scopes, {
 export type InsertScope = z.infer<typeof insertScopeSchema>;
 export type Scope = typeof scopes.$inferSelect;
 
+// ── Observations ───────────────────────────────────────────
 export const observations = pgTable("observations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   text: text("text").notNull(),
@@ -107,3 +144,53 @@ export const insertObservationSchema = createInsertSchema(observations).omit({
 
 export type InsertObservation = z.infer<typeof insertObservationSchema>;
 export type Observation = typeof observations.$inferSelect;
+
+// ── Connectors (external AI agents, data sources, webhooks) ──
+export const connectors = pgTable("connectors", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("AI_AGENT"),
+  provider: text("provider"),
+  description: text("description"),
+  apiKey: text("api_key").notNull(),
+  status: text("status").notNull().default("ACTIVE"),
+  config: jsonb("config").$type<Record<string, any>>().default({}),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertConnectorSchema = createInsertSchema(connectors).omit({
+  id: true,
+  apiKey: true,
+  lastUsedAt: true,
+  createdAt: true,
+});
+
+export type InsertConnector = z.infer<typeof insertConnectorSchema>;
+export type Connector = typeof connectors.$inferSelect;
+
+// ── Intents (gateway audit log) ────────────────────────────
+export const intents = pgTable("intents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id"),
+  scopeId: varchar("scope_id"),
+  connectorId: varchar("connector_id"),
+  inputText: text("input_text").notNull(),
+  decision: text("decision").notNull(),
+  category: text("category"),
+  layer: text("layer"),
+  pressure: text("pressure"),
+  reason: text("reason"),
+  escalation: text("escalation"),
+  processingMs: integer("processing_ms"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertIntentSchema = createInsertSchema(intents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertIntent = z.infer<typeof insertIntentSchema>;
+export type Intent = typeof intents.$inferSelect;

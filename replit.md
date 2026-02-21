@@ -1,22 +1,32 @@
-# ORFHEUSS | PRSYS Console
+# ORFHEUSS | Universal Governance Model
 
 ## Overview
 
-**ORFHEUSS** is the outer shell — a governance console for clinical/medical environments (primarily ICU/Intensive Care). Inside runs **PRSYS** (Paontologisch Resonantie Systeem), an ontological model for organizational movement built on **Paontologie**: the intersection of Merleau-Ponty (the body as knowledge) and Tao (the way, the flow).
+**ORFHEUSS** is a universal governance model — a console that any organization can use to classify, escalate, and block intents based on configurable rules and datasets. Inside runs **PRSYS** (Paontologisch Resonantie Systeem), an ontological model for organizational movement built on **Paontologie**: the intersection of Merleau-Ponty (the body as knowledge) and Tao (the way, the flow).
 
-### Core Concept: Paontologie
-- Organizations are **flywheels** that interlock. Frequency = vibration = pressure (F-druk).
-- **5 Snelheden** (Speed disciplines: Sprint, Estafette, Horden, Marathon, Triathlon) determine how fast each flywheel spins.
-- **5 Koppelingen** (Coupling disciplines: Worstelen, Turks Worstelen, Aikido, Yoga, Capoeira) determine how flywheels connect — along a **West↔Oost** axis (direct grip vs. redirection/leverage).
-- When coupling fails, **Silent Violence** occurs: invisible damage that nobody names but everyone feels.
-- The overdrachtsratio (i = ω₁/ω₂) determines resonance vs. destruction.
+### Core Concept: Universal Governance
+- Organizations register with a **sector** and **gate profile** (Clinical, Financial, Legal, Educational, General, Custom)
+- Each organization loads **Scopes** — datasets containing classification categories, keywords, rules, and documents
+- External AI agents connect via **Connectors** with API keys
+- The **Universal Gateway** (`/api/gateway/classify`) applies gate + scope + OLYMPIA resolution to every intent
+- All decisions are logged in the **Intent Audit Trail**
 
 ### Modules
-- **ARGOS (TaoGate)** — Pre-governance classification. Dynamically loads classification rules from the active Scope. Categories, keywords, and escalation paths are all scope-defined.
-- **SCOPES** — Organizational scope management. Each scope defines classification categories (with PASS/BLOCK status, escalation targets, keywords) and organizational documents (visiedocumenten, mandaten, huisregels, protocollen). Scopes are the key to every organization.
-- **OLYMPIA (Rule Execution Layer)** — Jurisdictional rule conflict resolution. 4 layers (EU → NATIONAL → REGIONAL → MUNICIPAL) with priority mechanics. BLOCK wint altijd. Hogere jurisdictie wint bij conflict. Rules stored as JSONB in scopes. Regeldruk = Σ (laag_prioriteit × impact). Server-side resolution via `/api/olympia/resolve`.
+- **ARGOS (TaoGate)** — Pre-governance classification with pluggable gate profiles. Each organization's gate profile determines which patterns are blocked/escalated before scope classification.
+- **SCOPES** — Organizational scope management. Each scope defines classification categories (with PASS/BLOCK status, escalation targets, keywords) and organizational documents.
+- **OLYMPIA (Rule Execution Layer)** — Jurisdictional rule conflict resolution. 4 layers (EU → NATIONAL → REGIONAL → MUNICIPAL) with priority mechanics. BLOCK always wins. Higher jurisdiction wins on conflict.
+- **Organizations** — Multi-tenant organization management. Each org gets its own scopes, connectors, and gate profile.
+- **Connectors** — External AI agent/data source/webhook registry with API key generation.
+- **Dataset Import** — CSV/JSON import pipeline that creates Scopes automatically.
+- **Gateway Logs** — Audit trail of all intents processed through the universal gateway.
 
-The application also includes a Protocol Manual page, a Lexicon page, and a printable/downloadable README page.
+### Gate Profiles
+- **CLINICAL** — Blocks medication orders, procedures, triage, imperatives. Only observations allowed.
+- **GENERAL** — Blocks destructive imperatives, passes observations.
+- **FINANCIAL** — Blocks fraud/money laundering indicators, escalates KYC/AML.
+- **LEGAL** — Blocks criminal context, escalates legally sensitive intents.
+- **EDUCATIONAL** — Escalates assessments/testing, transparency for educational observations.
+- **CUSTOM** — Default general filtering, extensible per organization.
 
 The UI language is predominantly **Dutch**, reflecting the target user base.
 
@@ -28,84 +38,110 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend
 - **Framework**: React 18 with TypeScript
-- **Routing**: Wouter (lightweight client-side router)
-- **State Management**: TanStack React Query for server state, local React state for UI
+- **Routing**: React Router DOM v7
+- **State Management**: Local React state for UI, fetch for API calls
 - **Styling**: Tailwind CSS v4 with CSS variables for theming, using a dark clinical/technical theme (cyan accent on dark blue-grey)
 - **UI Components**: shadcn/ui (new-york style) with Radix UI primitives
-- **Charts**: Recharts for data visualization
-- **Animations**: Framer Motion
-- **PDF Export**: jsPDF + html2canvas for the README page
+- **Icons**: Lucide React
 - **Build Tool**: Vite with path aliases (`@/` → `client/src/`, `@shared/` → `shared/`)
 
 ### Backend
 - **Runtime**: Node.js with Express 5
 - **Language**: TypeScript, executed via `tsx`
 - **API Pattern**: RESTful JSON API under `/api/` prefix
-- **Build**: esbuild for server bundling, Vite for client bundling (orchestrated via `script/build.ts`)
+- **Gate System**: Pluggable gate profiles (`server/gateSystem.ts`) wrapping domain-specific gates (clinical, financial, legal, educational, general)
+- **Build**: esbuild for server bundling, Vite for client bundling
 
 ### API Endpoints
-- `POST /api/observations` — Create a new observation (validated with Zod)
-- `GET /api/observations?context=` — List observations, optionally filtered by context
-- `GET /api/observations/stats?context=` — Get aggregated stats (total, passed, blocked)
-- `GET /api/scopes` — List all scopes
-- `GET /api/scopes/default` — Get the default scope
-- `GET /api/scopes/:id` — Get a specific scope
-- `POST /api/scopes` — Create a new scope (validated with Zod)
-- `PUT /api/scopes/:id` — Update a scope
-- `DELETE /api/scopes/:id` — Delete a scope
-- `POST /api/olympia/resolve` — Resolve rule conflicts across jurisdictional layers (accepts scopeId, optional domain/category)
+
+#### Core
+- `POST /api/classify` — Classify intent with scope (uses org's gate profile)
+- `POST /api/olympia/resolve` — Resolve rule conflicts across jurisdictional layers
+- `GET /api/system/info` — System overview (orgs, scopes, connectors, intent stats)
+
+#### Organizations
+- `GET /api/organizations` — List all organizations
+- `GET /api/organizations/:id` — Get organization
+- `POST /api/organizations` — Create organization (name, slug, sector, gateProfile)
+- `PUT /api/organizations/:id` — Update organization
+- `DELETE /api/organizations/:id` — Delete organization
+
+#### Scopes
+- `GET /api/scopes` — List all scopes (optional `?orgId=`)
+- `GET /api/scopes/default` — Get default scope
+- `GET /api/scopes/:id` — Get scope
+- `POST /api/scopes` — Create scope
+- `PUT /api/scopes/:id` — Update scope
+- `DELETE /api/scopes/:id` — Delete scope
+- `POST /api/scopes/:id/preflight` — Preflight check before lock
+- `POST /api/scopes/:id/lock` — Lock scope
+
+#### Connectors
+- `GET /api/connectors` — List connectors (optional `?orgId=`)
+- `GET /api/connectors/:id` — Get connector
+- `POST /api/connectors` — Register connector (generates API key)
+- `PUT /api/connectors/:id` — Update connector
+- `DELETE /api/connectors/:id` — Delete connector
+
+#### Universal Gateway
+- `POST /api/gateway/classify` — Submit intent via API key auth (x-api-key header)
+
+#### Intent Audit
+- `GET /api/intents` — List intents (optional `?orgId=&limit=`)
+- `GET /api/intents/stats` — Intent statistics
+
+#### Dataset Import
+- `POST /api/import/json` — Import JSON dataset as scope
+- `POST /api/import/csv` — Import CSV dataset as scope
+
+#### Observations
+- `POST /api/observations` — Create observation
+- `GET /api/observations` — List observations
+- `GET /api/observations/stats` — Stats
+
+#### Research (Perplexity)
+- `POST /api/ingest/research` — Research topic via Perplexity
+- `POST /api/ingest/extract` — Extract scope from research
+- `POST /api/ingest/draft` — Create draft scope from research
+- `POST /api/ingest/manual-draft` — Create manual draft scope
 
 ### Data Storage
 - **Database**: PostgreSQL
-- **ORM**: Drizzle ORM with `drizzle-zod` for schema-to-validation integration
-- **Connection**: `node-postgres` (pg) pool via `DATABASE_URL` environment variable
-- **Schema**: Two tables:
-  - `observations`: `id` (UUID), `text`, `status` (PASS/BLOCK), `category`, `escalation`, `context` (default "IC"), `scopeId`, `createdAt`
-  - `scopes`: `id` (UUID), `name`, `description`, `categories` (JSONB), `documents` (JSONB), `rules` (JSONB — array of {ruleId, layer, domain, title, description, action, overridesLowerLayers, source?, article?}), `isDefault`, `createdAt`, `updatedAt`
-- **Migrations**: Managed via `drizzle-kit push` (schema-push approach, not migration files)
-- **Seed**: Default IC scope seeded on first startup (`server/seed.ts`)
-
-### Shared Code
-- `shared/schema.ts` contains the Drizzle table definition, Zod insert schema, and TypeScript types — shared between frontend and backend
-
-### Development vs Production
-- **Development**: Vite dev server with HMR proxied through Express, `tsx` for server execution
-- **Production**: Client built to `dist/public/`, server bundled to `dist/index.cjs`, served as static files with SPA fallback
+- **ORM**: Drizzle ORM with `drizzle-zod`
+- **Tables**:
+  - `organizations`: id, name, slug, description, sector, gate_profile, created_at
+  - `scopes`: id, name, description, status, org_id, categories (JSONB), documents (JSONB), rules (JSONB), ingest_meta (JSONB), is_default, created_at, updated_at
+  - `observations`: id, text, status, category, escalation, context, scope_id, olympia_rule_id, olympia_action, olympia_layer, created_at
+  - `connectors`: id, org_id, name, type, provider, description, api_key, status, config (JSONB), last_used_at, created_at
+  - `intents`: id, org_id, scope_id, connector_id, input_text, decision, category, layer, pressure, reason, escalation, processing_ms, created_at
 
 ### Pages
-- `/` — ARGOS TaoGate (Atelier Argos — pre-governance classification)
-- `/scopes` — SCOPES (organizational scope management — categories, keywords, escalation, documents)
-- `/olympia` — OLYMPIA Rule Execution Layer (jurisdictional rule conflict resolution across 4 layers: EU, NATIONAL, REGIONAL, MUNICIPAL)
-- `/lexicon` — ORFHEUSS Lexicon (grondcyclus, ateliers, axioma's, ethiek)
-- `/manual` — Protocol Manual
-- `/readme` — Downloadable PDF guide
+- `/` — Dashboard (system overview, stats, quick links)
+- `/organizations` — Organization management
+- `/triage` — ARGOS TaoGate (intent classification with scope selector)
+- `/scopes` — Scope management
+- `/import` — Dataset import (JSON/CSV)
+- `/connectors` — Connector/agent registry
+- `/gateway-logs` — Intent audit trail
+- `/olympia` — OLYMPIA Rule Execution Layer
+- `/ingest` — AI-powered research & scope extraction
+- `/lexicon` — Lexicon
 
 ### Key Design Decisions
-1. **Monorepo structure** (`client/`, `server/`, `shared/`) with shared schema — keeps types synchronized between frontend and backend without a separate package
-2. **Drizzle over other ORMs** — lightweight, type-safe, close to SQL
-3. **No authentication** — the system currently has no auth mechanism; it's designed as an internal tool
-4. **Auto-classification on client** — the ARGOS module classifies observations into categories using keyword matching on the frontend, not server-side AI
-5. **Polling for real-time updates** — observations refetch every 5 seconds via React Query's `refetchInterval` rather than WebSockets
+1. **Universal model** — Not tied to any specific sector. Gate profiles make it adaptable.
+2. **Pluggable gate system** — Clinical gate is one profile among many. Organizations choose their profile.
+3. **API-first gateway** — External agents authenticate via API keys and get full governance pipeline.
+4. **Multi-tenant via organizations** — Each org gets isolated scopes and connectors.
+5. **Dataset import** — CSV and JSON import creates draft Scopes automatically.
+6. **Audit trail** — Every gateway intent is logged with decision, timing, and context.
 
 ## External Dependencies
 
 ### Required Services
-- **PostgreSQL Database** — Required. Connection string must be provided via `DATABASE_URL` environment variable. Used for all persistent data storage.
+- **PostgreSQL Database** — Required for all persistent data storage.
 
 ### Key NPM Packages
-- `express` v5 — HTTP server
-- `drizzle-orm` + `drizzle-kit` — Database ORM and schema management
-- `pg` — PostgreSQL client
-- `@tanstack/react-query` — Server state management
-- `recharts` — Chart visualizations
-- `framer-motion` — Animations
-- `wouter` — Client-side routing
-- `jspdf` + `html2canvas` — PDF generation
-- `zod` + `drizzle-zod` — Runtime validation
-- `shadcn/ui` components (Radix UI based)
-
-### Replit-Specific
-- `@replit/vite-plugin-runtime-error-modal` — Error overlay in development
-- `@replit/vite-plugin-cartographer` — Dev tooling (dev only)
-- `@replit/vite-plugin-dev-banner` — Dev banner (dev only)
-- Custom `vite-plugin-meta-images` — Updates OpenGraph meta tags with Replit deployment URLs
+- `express` v5, `drizzle-orm`, `pg`, `zod`, `drizzle-zod`
+- `react`, `react-router-dom`, `lucide-react`
+- `tailwindcss`, `shadcn/ui` components
+- `openai` (Perplexity integration)
