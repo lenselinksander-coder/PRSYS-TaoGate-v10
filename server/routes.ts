@@ -125,11 +125,12 @@ export async function registerRoutes(
       if (gate.status === "BLOCK" || gate.status === "ESCALATE_HUMAN") {
         return res.json({
           status: gate.status,
-          layer: gate.layer,          // "CLINICAL"
-          band: gate.band,
+          olympia: gate.band,          // mapped for UI compatibility
+          layer: gate.layer,           // always "CLINICAL"
           pressure: gate.pressure,
           escalation: gate.escalation,
           reason: gate.reason,
+          winningRule: null,           // unify shape
           signals: gate.signals,
         });
       }
@@ -147,13 +148,14 @@ export async function registerRoutes(
 
       const olympia = resolveOlympiaRules(scope, matchedDomain);
       return res.json({
-        ...classification,
-        olympiaRuleId: olympia.winningRule?.ruleId || null,
-        olympiaAction: olympia.winningRule?.action || null,
-        olympiaLayer: olympia.winningRule?.layer || null,
-        olympiaRule: olympia.winningRule || null,
-        olympiaHasConflict: olympia.hasConflict,
-        olympiaPressure: olympia.pressure,
+        status: classification.status,
+        olympia: olympia.winningRule?.ruleId ?? null,
+        layer: olympia.winningRule?.layer ?? "EU",
+        pressure: olympia.pressure === "INFINITE" ? "CRITICAL" : "NORMAL",
+        escalation: classification.escalation ?? null,
+        reason: olympia.winningRule?.description ?? null,
+        winningRule: olympia.winningRule ?? null,
+        signals: null,
       });
     } catch (err: any) {
       return res.status(500).json({
