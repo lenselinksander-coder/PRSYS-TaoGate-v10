@@ -1,4 +1,5 @@
 import { runGate } from "./gateSystem";
+import { orchestrateGate } from "./fsm/gateOrchestrator";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -409,7 +410,11 @@ export async function registerRoutes(
       }
 
       const gateProfile = (org.gateProfile as GateProfile) || "GENERAL";
-      const gate = runGate(parsed.data.text, gateProfile);
+      // Run gate evaluation inside the XState FSM (Feature 3: TypeScript FSM).
+      // The FSM validates all state transitions at compile-time and treats any
+      // evaluation error as BLOCK (fail-safe). Feature 1 (WASM sandbox) wires
+      // into the machine's evaluateGate actor via gateSystem.ts.
+      const gate = await orchestrateGate(parsed.data.text, gateProfile);
 
       let scopeResult = null;
       let olympiaResult = null;
