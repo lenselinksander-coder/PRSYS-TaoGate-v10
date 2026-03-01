@@ -4,61 +4,114 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  
-  /* ORFHEUSS / OLYMPIA THEME - CLINICAL / TECHNICAL */
-  --color-background: hsl(220 15% 10%); /* Very dark blue-grey */
-  --color-foreground: hsl(220 10% 95%); /* Off-white */
-  
-  --color-card: hsl(220 15% 13%);
-  --color-card-foreground: hsl(220 10% 95%);
-  
-  --color-popover: hsl(220 15% 13%);
-  --color-popover-foreground: hsl(220 10% 95%);
-  
-  --color-primary: hsl(190 80% 60%); /* Clinical Cyan */
-  --color-primary-foreground: hsl(220 15% 10%);
-  
-  --color-secondary: hsl(220 10% 25%);
-  --color-secondary-foreground: hsl(220 10% 95%);
-  
-  --color-muted: hsl(220 10% 20%);
-  --color-muted-foreground: hsl(220 10% 60%);
-  
-  --color-accent: hsl(190 80% 60%);
-  --color-accent-foreground: hsl(220 15% 10%);
-  
-  --color-destructive: hsl(0 70% 50%); /* Alert Red */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  /* ── RETRO 80s × MATRIX THEME ─────────────────────────────────────────── */
+  /* Primary: matrix green #00ff41 · Accent: neon orange #ff6600            */
+  /* Background: near-black · Font: JetBrains Mono throughout               */
+
+  --color-background: hsl(0 0% 2%);
+  --color-foreground: hsl(130 90% 70%);        /* phosphor green text */
+
+  --color-card: hsl(0 0% 4%);
+  --color-card-foreground: hsl(130 80% 65%);
+
+  --color-popover: hsl(0 0% 5%);
+  --color-popover-foreground: hsl(130 80% 65%);
+
+  --color-primary: hsl(130 100% 50%);          /* #00ff41 matrix green */
+  --color-primary-foreground: hsl(0 0% 0%);    /* black on green buttons */
+
+  --color-secondary: hsl(0 0% 9%);
+  --color-secondary-foreground: hsl(130 70% 60%);
+
+  --color-muted: hsl(0 0% 7%);
+  --color-muted-foreground: hsl(130 40% 35%);  /* dim green */
+
+  --color-accent: hsl(28 100% 52%);            /* #ff6600 neon orange */
+  --color-accent-foreground: hsl(0 0% 0%);
+
+  --color-destructive: hsl(0 100% 50%);        /* hard red for BLOCK */
   --color-destructive-foreground: hsl(0 0% 100%);
-  
-  --color-border: hsl(220 10% 20%);
-  --color-input: hsl(220 10% 20%);
-  --color-ring: hsl(190 80% 60%);
-  
-  --color-chart-1: hsl(190 80% 60%); /* Cyan */
-  --color-chart-2: hsl(280 60% 60%); /* Purple */
-  --color-chart-3: hsl(140 60% 50%); /* Green */
-  --color-chart-4: hsl(40 80% 60%);  /* Amber */
-  --color-chart-5: hsl(0 70% 60%);   /* Red */
-  
-  --font-sans: 'Inter', system-ui, sans-serif;
+
+  --color-border: hsl(130 60% 15%);            /* dim green border */
+  --color-input: hsl(0 0% 6%);
+  --color-ring: hsl(130 100% 50%);             /* green focus ring */
+
+  --color-chart-1: hsl(130 100% 50%);          /* matrix green */
+  --color-chart-2: hsl(28 100% 52%);           /* neon orange */
+  --color-chart-3: hsl(50 100% 55%);           /* amber */
+  --color-chart-4: hsl(0 100% 55%);            /* red */
+  --color-chart-5: hsl(280 80% 65%);           /* purple */
+
+  --font-sans: 'JetBrains Mono', monospace;    /* full monospace */
   --font-mono: 'JetBrains Mono', monospace;
-  
-  --radius: 0.25rem;
+
+  --radius: 0rem;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
+
   body {
-    @apply font-sans antialiased bg-background text-foreground;
-    background-image: radial-gradient(circle at 50% 0%, hsl(220 15% 15%), transparent 70%);
+    @apply font-mono antialiased bg-background text-foreground;
+    /* CRT vignette */
+    background-image: radial-gradient(ellipse at center, #050505 55%, #000000 100%);
+    position: relative;
   }
+
+  /* ── CRT scanlines overlay ───────────────────────────────────────────── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9998;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(0, 0, 0, 0.18) 3px,
+      rgba(0, 0, 0, 0.18) 4px
+    );
+  }
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-mono tracking-tight;
+  }
+
+  /* ── Selection color ─────────────────────────────────────────────────── */
+  ::selection {
+    background-color: rgba(0, 255, 65, 0.25);
+    color: #00ff41;
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: #00ff41; }
+  ::-webkit-scrollbar-thumb:hover { background: #00cc33; }
+}
+
+/* ── Neon glow utilities ─────────────────────────────────────────────────── */
+@layer utilities {
+  .neon-text {
+    text-shadow: 0 0 8px currentColor, 0 0 20px currentColor;
+  }
+  .neon-border {
+    box-shadow: 0 0 8px #00ff41, 0 0 2px #00ff41, inset 0 0 8px rgba(0, 255, 65, 0.04);
+  }
+  .neon-orange {
+    color: #ff6600;
+    text-shadow: 0 0 8px #ff6600, 0 0 20px #ff6600;
+  }
+  .neon-red {
+    color: #ff0040;
+    text-shadow: 0 0 8px #ff0040, 0 0 20px #ff0040;
   }
 }
