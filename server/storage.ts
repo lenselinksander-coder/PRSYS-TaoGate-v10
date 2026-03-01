@@ -8,6 +8,7 @@ import {
 import { db } from "./db";
 import { desc, eq, sql, and } from "drizzle-orm";
 import crypto from "crypto";
+import { appendWormEntry } from "./audit/wormChain";
 
 export interface IStorage {
   createObservation(observation: InsertObservation): Promise<Observation>;
@@ -186,6 +187,18 @@ export class DatabaseStorage implements IStorage {
   // ── Intents (audit log) ────────────────────────────────
   async createIntent(intent: InsertIntent): Promise<Intent> {
     const [result] = await db.insert(intents).values(intent).returning();
+    // Feature 2: WORM audit chain — fire-and-forget write to S3 Object Lock.
+    // Never blocks the API response. No-op if WORM_S3_BUCKET is not set.
+    appendWormEntry({
+      orgId: intent.orgId ?? null,
+      connectorId: intent.connectorId ?? null,
+      inputText: intent.inputText,
+      decision: intent.decision,
+      category: intent.category ?? null,
+      layer: intent.layer ?? null,
+      pressure: intent.pressure ?? null,
+      processingMs: intent.processingMs ?? null,
+    });
     return result;
   }
 

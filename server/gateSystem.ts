@@ -1,6 +1,12 @@
 import { clinicalGate, type ClinicalGateResult } from "./clinicalGate";
 import type { GateProfile } from "@shared/schema";
 
+// Feature 1: WASM sandbox — re-exported for use by the FSM and routes.
+// runGateWasm runs the gate logic inside a hermetic QuickJS WASM VM with
+// fuel-based (instruction-counter) termination. The synchronous runGate()
+// below is kept as a fallback for non-sandboxed routes.
+export { runGateWasm } from "./wasm/gateRunner";
+
 export type GateResult = {
   status: "PASS" | "PASS_WITH_TRANSPARENCY" | "ESCALATE_HUMAN" | "ESCALATE_REGULATORY" | "BLOCK";
   layer: string;
