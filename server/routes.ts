@@ -8,6 +8,35 @@ import type { Scope, GateDecision, ScopeRule, RuleLayer, GateProfile } from "@sh
 import { z } from "zod";
 import { researchTopic, extractScopeFromResearch, preflightCheck } from "./perplexity";
 
+// ── Cerberus: absolute boundary enforcement ───────────────────────────────────
+// Decision hierarchy (higher index = more restrictive):
+//   BLOCK(5) > ESCALATE_REGULATORY(4) > ESCALATE_HUMAN(3)
+//             > PASS_WITH_TRANSPARENCY(2) > PASS(1)
+//
+// The gate decision is the absolute lower bound. A scope or runtime decision
+// can tighten a passing gate result, but can never loosen it. This ensures
+// Cerberus cannot be overridden by any downstream or runtime decision.
+
+const CERBERUS_SEVERITY: Record<string, number> = {
+  BLOCK: 5,
+  ESCALATE_REGULATORY: 4,
+  ESCALATE_HUMAN: 3,
+  PASS_WITH_TRANSPARENCY: 2,
+  PASS: 1,
+};
+
+/**
+ * Return the more restrictive of two decisions.
+ * The gate decision is authoritative when both are equally severe.
+ * If scopeDecision is absent, the gate decision is returned unchanged.
+ */
+function cerberusEnforce(gateDecision: string, scopeDecision?: string | null): string {
+  if (!scopeDecision) return gateDecision;
+  const gateSev = CERBERUS_SEVERITY[gateDecision] ?? 0;
+  const scopeSev = CERBERUS_SEVERITY[scopeDecision] ?? 0;
+  return gateSev >= scopeSev ? gateDecision : scopeDecision;
+}
+
 function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null; reason: string | null } {
   const lower = text.toLowerCase();
   const priorityOrder: GateDecision[] = ["BLOCK", "ESCALATE_REGULATORY", "ESCALATE_HUMAN", "PASS_WITH_TRANSPARENCY", "PASS"];
@@ -167,13 +196,15 @@ export async function registerRoutes(
       const matchedDomain = availableDomains.find(d => classification.category.toUpperCase().includes(d.toUpperCase()));
 
       const olympia = resolveOlympiaRules(scope, matchedDomain);
+      // Cerberus: gate decision is the absolute lower bound — scope cannot downgrade it
+      const finalStatus = cerberusEnforce(gate.status, classification.status);
       return res.json({
-        status: classification.status,
+        status: finalStatus,
         olympia: olympia.winningRule?.ruleId ?? null,
         layer: olympia.winningRule?.layer ?? "EU",
         pressure: olympia.pressure === "INFINITE" ? "CRITICAL" : "NORMAL",
         escalation: classification.escalation ?? null,
-        reason: classification.reason ?? (classification.status !== "PASS" ? (olympia.winningRule?.description ?? null) : null),
+        reason: classification.reason ?? (finalStatus !== "PASS" ? (olympia.winningRule?.description ?? null) : null),
         winningRule: olympia.winningRule ?? null,
         signals: null,
       });
@@ -437,7 +468,8 @@ export async function registerRoutes(
         }
       }
 
-      const finalDecision = scopeResult?.status || gate.status;
+      // Cerberus: gate decision is the absolute lower bound — scope cannot downgrade it
+      const finalDecision = cerberusEnforce(gate.status, scopeResult?.status);
       const processingMs = Date.now() - start;
 
       await storage.touchConnector(connector.id);
