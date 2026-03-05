@@ -8,6 +8,7 @@ import ConnectorsPage from "./pages/ConnectorsPage";
 import ImportPage from "./pages/ImportPage";
 import GatewayLogsPage from "./pages/GatewayLogsPage";
 import TriagePage from "./TriagePage";
+import CastraPage from "./pages/CastraPage";
 
 function AdminRoutes() {
   return (
@@ -16,6 +17,7 @@ function AdminRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="organizations" element={<OrganizationsPage />} />
         <Route path="triage" element={<TriagePage />} />
+        <Route path="castra" element={<CastraPage />} />
         <Route path="connectors" element={<ConnectorsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="gateway-logs" element={<GatewayLogsPage />} />
