@@ -7,6 +7,7 @@ import { insertObservationSchema, insertScopeSchema, ruleLayers, insertOrganizat
 import type { Scope, GateDecision, ScopeRule, RuleLayer, GateProfile } from "@shared/schema";
 import { z } from "zod";
 import { researchTopic, extractScopeFromResearch, preflightCheck } from "./perplexity";
+import { runTrace } from "./trace/traceRunner";
 
 // ── Cerberus: absolute boundary enforcement ───────────────────────────────────
 // Decision hierarchy (higher index = more restrictive):
@@ -861,6 +862,38 @@ export async function registerRoutes(
 
     const locked = await storage.updateScope(scope.id, { status: "LOCKED" });
     return res.json({ scope: locked, preflight });
+  });
+
+  // ── ORFHEUSS Trace Pipeline ──────────────────────────────
+  // POST /api/trace — run the full 10-step ORFHEUSS pipeline and return
+  // a step-by-step trace with TaoGate Decision Lattice, Hypatia risk
+  // formula, and Phronesis capacity formula results.
+  const traceSchema = z.object({
+    input: z.string().min(0).max(4000),
+    profile: z.enum(gateProfiles).optional(),
+    tau: z.number().min(0).max(1000).optional(),
+    omega: z.number().min(0).max(1).optional(),
+    impact: z.number().min(0).max(1).optional(),
+    probability: z.number().min(0).max(1).optional(),
+  });
+
+  app.post("/api/trace", async (req, res) => {
+    const parsed = traceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    try {
+      const result = await runTrace(parsed.data);
+      return res.json(result);
+    } catch (err: any) {
+      // Fail-safe: any pipeline error → BLOCK (Lex Tabularium)
+      return res.status(500).json({
+        error: "trace_error",
+        message: err?.message ?? String(err),
+        finalDecision: "BLOCK",
+        finalReason: "Pipeline fout — geblokkeerd als fail-safe (Lex Tabularium).",
+      });
+    }
   });
 
   // ── System Info ──────────────────────────────────────────

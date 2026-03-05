@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Eye, ShieldAlert, Menu, X, Building2, Plug, FileInput, ScrollText, LayoutDashboard, Monitor } from "lucide-react";
+import { Eye, ShieldAlert, Menu, X, Building2, Plug, FileInput, ScrollText, LayoutDashboard, Monitor, Map } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MatrixRain } from "@/components/MatrixRain";
@@ -18,6 +18,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Dashboard", path: "/admin", icon: LayoutDashboard },
     { name: "Organisaties", path: "/admin/organizations", icon: Building2 },
     { name: "ARGOS", path: "/admin/triage", icon: Eye },
+    { name: "Castra", path: "/admin/castra", icon: Map },
     { name: "Import", path: "/admin/import", icon: FileInput },
     { name: "Connectors", path: "/admin/connectors", icon: Plug },
     { name: "Gateway Logs", path: "/admin/gateway-logs", icon: ScrollText },
