@@ -7,37 +7,27 @@ import { insertObservationSchema, insertScopeSchema, ruleLayers, insertOrganizat
 import type { Scope, GateDecision, ScopeRule, RuleLayer, GateProfile } from "@shared/schema";
 import { z } from "zod";
 import { researchTopic, extractScopeFromResearch, preflightCheck } from "./perplexity";
+import { maxDecision, compareDecision, getLattice } from "./prsys/canon/decisionLattice";
 
-// ── Cerberus: absolute boundary enforcement ───────────────────────────────────
-// Decision hierarchy (higher index = more restrictive):
-//   BLOCK(5) > ESCALATE_REGULATORY(4) > ESCALATE_HUMAN(3)
-//             > PASS_WITH_TRANSPARENCY(2) > PASS(1)
+// ── Cerberus: absolute boundary enforcement via the formal decision lattice ───
+// Decision hierarchy (ascending restrictiveness):
+//   PASS < PASS_WITH_TRANSPARENCY < ESCALATE_HUMAN < ESCALATE_REGULATORY < BLOCK
 //
 // The gate decision is the absolute lower bound. A scope or runtime decision
 // can tighten a passing gate result, but can never loosen it. This ensures
 // Cerberus cannot be overridden by any downstream or runtime decision.
-
-const CERBERUS_SEVERITY: Record<string, number> = {
-  BLOCK: 5,
-  ESCALATE_REGULATORY: 4,
-  ESCALATE_HUMAN: 3,
-  PASS_WITH_TRANSPARENCY: 2,
-  PASS: 1,
-};
+// Implemented using maxDecision() from the formal PRSYS decision lattice.
 
 /**
- * Return the more restrictive of two decisions.
- * The gate decision is authoritative when both are equally severe.
+ * Return the more restrictive of two gate decisions.
+ * Delegates to the formal decision lattice: D_final = maxDecision(D_gate, D_scope).
  * If scopeDecision is absent, the gate decision is returned unchanged.
  */
-function cerberusEnforce(gateDecision: string, scopeDecision?: string | null): string {
-  if (!scopeDecision) return gateDecision;
-  const gateSev = CERBERUS_SEVERITY[gateDecision] ?? 0;
-  const scopeSev = CERBERUS_SEVERITY[scopeDecision] ?? 0;
-  return gateSev >= scopeSev ? gateDecision : scopeDecision;
+function cerberusEnforce(gateDecision: GateDecision, scopeDecision?: GateDecision | null): GateDecision {
+  return maxDecision(gateDecision, scopeDecision);
 }
 
-function classifyWithScope(text: string, scope: Scope): { status: string; category: string; escalation: string | null; reason: string | null } {
+function classifyWithScope(text: string, scope: Scope): { status: GateDecision; category: string; escalation: string | null; reason: string | null } {
   const lower = text.toLowerCase();
   const priorityOrder: GateDecision[] = ["BLOCK", "ESCALATE_REGULATORY", "ESCALATE_HUMAN", "PASS_WITH_TRANSPARENCY", "PASS"];
 
@@ -879,6 +869,265 @@ export async function registerRoutes(
       intents: intentStats,
       gateProfiles: ["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"],
       sectors: ["healthcare", "finance", "education", "government", "technology", "legal", "energy", "transport", "retail", "manufacturing", "other"],
+    });
+  });
+
+  // ── Pipeline Trace ───────────────────────────────────────
+  // POST /api/trace
+  //
+  // Runs an input through the full PRSYS/TaoGate pipeline and returns a
+  // step-by-step trace showing each agent's contribution to the final decision.
+  //
+  // Pipeline agents:
+  //   INPUT → Argos → Arachne → Logos → Hypatia → Cerberus → TaoGate → Sandbox → Audit
+  //
+  // Body: { text: string, profile?: GateProfile, scopeId?: string }
+
+  const traceSchema = z.object({
+    text: z.string().min(1).max(8000),
+    profile: z.enum(["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"]).optional().default("GENERAL"),
+    scopeId: z.string().optional(),
+  });
+
+  app.post("/api/trace", async (req, res) => {
+    const start = Date.now();
+    const parsed = traceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const { text, profile, scopeId } = parsed.data;
+
+    type StepStatus = "pass" | "flagged" | "blocked" | "escalated" | "logged";
+    type PipelineStep = {
+      agent: string;
+      role: string;
+      status: StepStatus;
+      durationMs: number;
+      result: Record<string, unknown>;
+    };
+
+    const steps: PipelineStep[] = [];
+
+    // ── Step 1: INPUT ──────────────────────────────────────────────────────────
+    const t0 = Date.now();
+    const inputStep: PipelineStep = {
+      agent: "INPUT",
+      role: "Porta — raw input received",
+      status: "pass",
+      durationMs: Date.now() - t0,
+      result: {
+        text,
+        length: text.length,
+        profile,
+      },
+    };
+    steps.push(inputStep);
+
+    // ── Step 2: Argos (observer) ───────────────────────────────────────────────
+    // Normalizes input and reports structural observations (length, casing, etc.)
+    const t1 = Date.now();
+    const normalised = text.toLowerCase().replace(/\s+/g, " ").trim();
+    const wordCount = normalised.split(" ").filter(Boolean).length;
+    const hasImperative = /\b(verwijder|delete|wis|stop|blokkeer|deactiveer|annuleer|override|forceer|immediately|onmiddellijk)\b/i.test(normalised);
+    const argosStep: PipelineStep = {
+      agent: "Argos",
+      role: "Observer — input normalization & structural analysis",
+      status: "pass",
+      durationMs: Date.now() - t1,
+      result: {
+        wordCount,
+        hasImperative,
+        normalised: normalised.slice(0, 200) + (normalised.length > 200 ? "…" : ""),
+      },
+    };
+    steps.push(argosStep);
+
+    // ── Step 3: Arachne (structurer) ───────────────────────────────────────────
+    // Detects which domain-pattern categories are present in the input.
+    // Patterns are bilingual (Dutch/English) to support the system's primary
+    // use-case in the Netherlands while remaining accessible to English users.
+    const t2 = Date.now();
+    const DOMAIN_PATTERNS: Record<string, string[]> = {
+      // Dutch: transactie, betaling, rekening, fraude, witwassen | English: transaction, payment, fraud
+      financial: ["transactie", "betaling", "rekening", "fraude", "witwassen", "kyc", "aml", "transaction", "payment", "fraud"],
+      // Dutch: vonnis, rechtszaak, advocaat, strafbaar, misdrijf | English: verdict, lawsuit
+      legal: ["vonnis", "rechtszaak", "advocaat", "strafbaar", "misdrijf", "contract", "verdict", "lawsuit"],
+      // Dutch: medicatie, diagnose, dosis, behandeling | English: medication, diagnosis, treatment
+      clinical: ["medicatie", "diagnose", "patient", "dosis", "behandeling", "medication", "diagnosis", "treatment"],
+      // Dutch: leerling, toets, examen, cijfer, diploma | English: assessment, plagiarism
+      educational: ["leerling", "student", "toets", "examen", "cijfer", "diploma", "assessment", "plagiarism"],
+    };
+    const detectedDomains: string[] = [];
+    for (const [domain, patterns] of Object.entries(DOMAIN_PATTERNS)) {
+      if (patterns.some(p => normalised.includes(p))) {
+        detectedDomains.push(domain);
+      }
+    }
+    const arachneStep: PipelineStep = {
+      agent: "Arachne",
+      role: "Structurer — domain pattern detection & categorisation",
+      status: detectedDomains.length > 0 ? "flagged" : "pass",
+      durationMs: Date.now() - t2,
+      result: {
+        detectedDomains,
+        domainCount: detectedDomains.length,
+      },
+    };
+    steps.push(arachneStep);
+
+    // ── Step 4: Logos (reasoner) ───────────────────────────────────────────────
+    // Runs the synchronous gate logic to determine intent classification.
+    const t3 = Date.now();
+    const gateResult = runGate(text, profile as GateProfile);
+    const logosStep: PipelineStep = {
+      agent: "Logos",
+      role: "Reasoner — intent recognition & gate pattern matching",
+      status: gateResult.status === "PASS" ? "pass" : gateResult.status === "BLOCK" ? "blocked" : "flagged",
+      durationMs: Date.now() - t3,
+      result: {
+        layer: gateResult.layer,
+        band: gateResult.band,
+        pressure: gateResult.pressure,
+        signals: gateResult.signals,
+      },
+    };
+    steps.push(logosStep);
+
+    // ── Step 5: Hypatia (evaluator) ────────────────────────────────────────────
+    // Gate profile evaluation — applies domain-specific rules.
+    const t4 = Date.now();
+    const hypatiaStatus: StepStatus =
+      gateResult.status === "BLOCK" ? "blocked"
+      : gateResult.status === "ESCALATE_HUMAN" || gateResult.status === "ESCALATE_REGULATORY" ? "escalated"
+      : gateResult.status === "PASS_WITH_TRANSPARENCY" ? "flagged"
+      : "pass";
+    const hypatiaStep: PipelineStep = {
+      agent: "Hypatia",
+      role: "Evaluator — gate profile rules applied",
+      status: hypatiaStatus,
+      durationMs: Date.now() - t4,
+      result: {
+        gateProfile: profile,
+        gateStatus: gateResult.status,
+        reason: gateResult.reason,
+        escalation: gateResult.escalation,
+      },
+    };
+    steps.push(hypatiaStep);
+
+    // ── Step 6: Cerberus (boundary) ────────────────────────────────────────────
+    // Resolves the final decision via the formal decision lattice.
+    // D_final = maxDecision(D_gate, D_scope)
+    const t5 = Date.now();
+    let scopeDecision: GateDecision | null = null;
+    let scopeCategory: string | null = null;
+    let scopeEscalation: string | null = null;
+    let scopeReason: string | null = null;
+    if (gateResult.status === "PASS" || gateResult.status === "PASS_WITH_TRANSPARENCY") {
+      let scope: Scope | undefined;
+      if (scopeId) {
+        scope = await storage.getScope(scopeId);
+      } else {
+        const allScopes = await storage.getScopes();
+        scope = allScopes.find(s => s.status === "LOCKED");
+      }
+      if (scope) {
+        const sr = classifyWithScope(text, scope);
+        scopeDecision = sr.status;
+        scopeCategory = sr.category;
+        scopeEscalation = sr.escalation;
+        scopeReason = sr.reason;
+      }
+    }
+    const cerberusDecision = cerberusEnforce(gateResult.status, scopeDecision);
+    const latticeComparison = scopeDecision
+      ? compareDecision(gateResult.status, scopeDecision)
+      : null;
+    const cerberusStep: PipelineStep = {
+      agent: "Cerberus",
+      role: "Guardian — absolute boundary enforcement via decision lattice",
+      status: cerberusDecision === "BLOCK" ? "blocked"
+        : cerberusDecision === "ESCALATE_HUMAN" || cerberusDecision === "ESCALATE_REGULATORY" ? "escalated"
+        : cerberusDecision === "PASS_WITH_TRANSPARENCY" ? "flagged"
+        : "pass",
+      durationMs: Date.now() - t5,
+      result: {
+        gateDecision: gateResult.status,
+        scopeDecision,
+        scopeCategory,
+        scopeEscalation,
+        scopeReason,
+        cerberusDecision,
+        latticeComparison,
+        lattice: getLattice(),
+        formula: "D_final = maxDecision(D_gate, D_scope)",
+      },
+    };
+    steps.push(cerberusStep);
+
+    // ── Step 7: TaoGate (decision) ─────────────────────────────────────────────
+    // Applies the final authoritative decision.
+    const t6 = Date.now();
+    const finalDecision = cerberusDecision;
+    const taogateStep: PipelineStep = {
+      agent: "TaoGate",
+      role: "Decision — final authoritative gate outcome",
+      status: finalDecision === "BLOCK" ? "blocked"
+        : finalDecision === "ESCALATE_HUMAN" || finalDecision === "ESCALATE_REGULATORY" ? "escalated"
+        : finalDecision === "PASS_WITH_TRANSPARENCY" ? "flagged"
+        : "pass",
+      durationMs: Date.now() - t6,
+      result: {
+        decision: finalDecision,
+        authoritative: true,
+      },
+    };
+    steps.push(taogateStep);
+
+    // ── Step 8: Sandbox (executor) ─────────────────────────────────────────────
+    // In production the gate logic runs inside a hermetic QuickJS WASM VM with
+    // fuel-based instruction-counter termination. The trace notes this layer.
+    const t7 = Date.now();
+    const sandboxStep: PipelineStep = {
+      agent: "Sandbox",
+      role: "Executor — hermetic QuickJS WASM VM (fuel-limited)",
+      status: "pass",
+      durationMs: Date.now() - t7,
+      result: {
+        engine: "QuickJS WASM",
+        fuelLimited: true,
+        hermeticIo: true,
+        note: "Gate logic runs inside WASM sandbox during production classify calls.",
+      },
+    };
+    steps.push(sandboxStep);
+
+    // ── Step 9: Audit (recorder) ───────────────────────────────────────────────
+    // In production the decision is appended to the WORM hash-chain (S3 Object
+    // Lock, 7-year retention). The trace notes this without writing an entry.
+    const t8 = Date.now();
+    const auditStep: PipelineStep = {
+      agent: "Audit",
+      role: "Recorder — WORM hash-chain (Tabularium)",
+      status: "logged",
+      durationMs: Date.now() - t8,
+      result: {
+        wormEnabled: Boolean(process.env.WORM_S3_BUCKET),
+        retention: "7 years (S3 Object Lock COMPLIANCE mode)",
+        note: "Trace calls are not written to the WORM audit chain.",
+      },
+    };
+    steps.push(auditStep);
+
+    const totalMs = Date.now() - start;
+
+    return res.json({
+      input: text,
+      profile,
+      decision: finalDecision,
+      durationMs: totalMs,
+      pipeline: steps,
     });
   });
 
