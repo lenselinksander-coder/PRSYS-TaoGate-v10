@@ -6,6 +6,8 @@ Tests cover:
   2. Barbatos guard: alpha=0 no longer causes ZeroDivisionError.
   3. GDPR fail-safe: PrivacyGate exception → STOP.
   4. Governance invariants: GDPR STOP always produces BLOCK; no BLOCK→PASS relaxation.
+  5. INUIT · BIOLOGY: Siku ∈ {0,1}; Siku=0 tightens PASS→HOLD; cannot relax BLOCK.
+  6. DYMPHNA: D_l > D_k^e forces BLOCK; DymphnaSignal validation; explain_decision keys.
 
 Run with:
     python -m tao_gate.test_fixes
@@ -19,6 +21,7 @@ from dataclasses import dataclass
 from unittest.mock import patch
 
 from tao_gate.gdpr_bridge import DecisionResult, GdprDecision
+from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
 from tao_gate.supervisor import explain_decision, tao_gate_decide
 
@@ -198,6 +201,150 @@ class TestGovernanceInvariants(unittest.TestCase):
         state = State(Delta_ext=0.0, sigma_ext=5.0, omega=1.0, tau=2.0, TI=1.0)
         cap = omega_capacity(state)
         self.assertEqual(cap, 0.0)
+
+
+class TestInuitSiku(unittest.TestCase):
+    """INUIT · BIOLOGY sensor and its integration with tao_gate_decide."""
+
+    def test_siku_1_allows_pass(self) -> None:
+        """Siku=1 (sufficient capacity) must not prevent PASS."""
+        from tao_gate.inuit import inuit_context_check
+        signal = inuit_context_check({"siku": 1})
+        mode = tao_gate_decide(_HEALTHY_STATE, legitimacy_ok=True,
+                               gdpr_result=_GDPR_PASS, inuit_signal=signal)
+        self.assertEqual(mode, Mode.PASS)
+
+    def test_siku_0_tightens_pass_to_hold(self) -> None:
+        """Siku=0 must tighten a would-be PASS to HOLD."""
+        from tao_gate.inuit import inuit_context_check
+        signal = inuit_context_check({"relational_capacity_ok": False})
+        self.assertEqual(signal.siku, 0)
+        mode = tao_gate_decide(_HEALTHY_STATE, legitimacy_ok=True,
+                               gdpr_result=_GDPR_PASS, inuit_signal=signal)
+        self.assertEqual(mode, Mode.HOLD)
+
+    def test_siku_0_does_not_relax_block(self) -> None:
+        """Siku=0 must never relax an existing BLOCK to HOLD."""
+        from tao_gate.inuit import inuit_context_check
+        signal = inuit_context_check({"biology_signal_ok": False})
+        # TI=0.1 < TI_min=0.5 → hard BLOCK
+        blocked_state = State(Delta_ext=0.1, sigma_ext=0.0, omega=0.0, tau=5.0, TI=0.1)
+        mode = tao_gate_decide(blocked_state, legitimacy_ok=True,
+                               gdpr_result=_GDPR_PASS, inuit_signal=signal)
+        self.assertEqual(mode, Mode.BLOCK)
+
+    def test_inuit_invalid_siku_raises(self) -> None:
+        """inuit_context_check must raise ValueError for siku ∉ {0,1}."""
+        from tao_gate.inuit import inuit_context_check
+        with self.assertRaises(ValueError):
+            inuit_context_check({"siku": 2})
+
+    def test_inuit_signal_invalid_siku_raises_on_construct(self) -> None:
+        """Directly constructing InuitSignal with siku=2 must raise ValueError."""
+        from tao_gate.inuit import InuitSignal
+        with self.assertRaises(ValueError):
+            InuitSignal(siku=2, reason="bad", source="test")
+
+    def test_inuit_all_clear_returns_siku_1(self) -> None:
+        """Empty context dict (all defaults True) must return Siku=1."""
+        from tao_gate.inuit import inuit_context_check
+        signal = inuit_context_check({})
+        self.assertEqual(signal.siku, 1)
+
+    def test_inuit_cultural_context_false_sets_siku_0(self) -> None:
+        """cultural_context_ok=False must yield Siku=0."""
+        from tao_gate.inuit import inuit_context_check
+        signal = inuit_context_check({"cultural_context_ok": False})
+        self.assertEqual(signal.siku, 0)
+        self.assertEqual(signal.source, "cultural_context")
+
+    def test_explain_decision_includes_inuit_key(self) -> None:
+        """explain_decision must include an 'inuit' key in its output."""
+        from tao_gate.inuit import inuit_context_check
+        signal = inuit_context_check({"siku": 1})
+        result = explain_decision(_HEALTHY_STATE, legitimacy_ok=True,
+                                  gdpr_result=_GDPR_PASS, inuit_signal=signal)
+        self.assertIn("inuit", result)
+        self.assertEqual(result["inuit"]["siku"], 1)
+
+
+class TestDymphna(unittest.TestCase):
+    """DYMPHNA cumulative-load sensor and its integration with tao_gate_decide."""
+
+    def test_no_overload_allows_pass(self) -> None:
+        """D_load < D_cap_eff must not prevent PASS."""
+        from tao_gate.dymphna import dymphna_check
+        state = State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+                      D_load=5.0, D_cap_eff=10.0)
+        sig = dymphna_check(state)
+        self.assertFalse(sig.overloaded)
+        mode = tao_gate_decide(state, legitimacy_ok=True, gdpr_result=_GDPR_PASS)
+        self.assertEqual(mode, Mode.PASS)
+
+    def test_overload_forces_block(self) -> None:
+        """D_load > D_cap_eff must force Mode.BLOCK (dysregulation)."""
+        state = State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+                      D_load=12.0, D_cap_eff=10.0)
+        mode = tao_gate_decide(state, legitimacy_ok=True, gdpr_result=_GDPR_PASS)
+        self.assertEqual(mode, Mode.BLOCK)
+
+    def test_overload_block_not_relaxed_by_inuit(self) -> None:
+        """DYMPHNA BLOCK must not be relaxed to HOLD by a Siku=1 INUIT signal."""
+        from tao_gate.inuit import inuit_context_check
+        state = State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+                      D_load=20.0, D_cap_eff=10.0)
+        inuit = inuit_context_check({"siku": 1})
+        mode = tao_gate_decide(state, legitimacy_ok=True,
+                               gdpr_result=_GDPR_PASS, inuit_signal=inuit)
+        self.assertEqual(mode, Mode.BLOCK)
+
+    def test_equal_load_capacity_not_overloaded(self) -> None:
+        """D_load == D_cap_eff is NOT overloaded (strict > required)."""
+        from tao_gate.dymphna import dymphna_check
+        state = State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+                      D_load=10.0, D_cap_eff=10.0)
+        sig = dymphna_check(state)
+        self.assertFalse(sig.overloaded)
+        mode = tao_gate_decide(state, legitimacy_ok=True, gdpr_result=_GDPR_PASS)
+        self.assertEqual(mode, Mode.PASS)
+
+    def test_default_state_not_overloaded(self) -> None:
+        """State with default D_load=0 and D_cap_eff=inf must never overload."""
+        from tao_gate.dymphna import dymphna_check
+        sig = dymphna_check(_HEALTHY_STATE)
+        self.assertFalse(sig.overloaded)
+        self.assertEqual(_HEALTHY_STATE.D_load, 0.0)
+        self.assertEqual(_HEALTHY_STATE.D_cap_eff, float("inf"))
+
+    def test_dymphna_signal_inconsistency_raises(self) -> None:
+        """DymphnaSignal with overloaded inconsistent with D_load/D_cap_eff must raise."""
+        from tao_gate.dymphna import DymphnaSignal
+        with self.assertRaises(ValueError):
+            # D_load=5 < D_cap_eff=10 but overloaded=True → inconsistent
+            DymphnaSignal(D_load=5.0, D_cap_eff=10.0, overloaded=True, reason="bad")
+
+    def test_dymphna_negative_d_load_raises(self) -> None:
+        """DymphnaSignal with D_load < 0 must raise ValueError."""
+        from tao_gate.dymphna import DymphnaSignal
+        with self.assertRaises(ValueError):
+            DymphnaSignal(D_load=-1.0, D_cap_eff=10.0, overloaded=False, reason="bad")
+
+    def test_explain_decision_includes_dymphna_key(self) -> None:
+        """explain_decision must include a 'dymphna' key in its output."""
+        state = State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+                      D_load=3.0, D_cap_eff=10.0)
+        result = explain_decision(state, legitimacy_ok=True, gdpr_result=_GDPR_PASS)
+        self.assertIn("dymphna", result)
+        self.assertFalse(result["dymphna"]["overloaded"])
+        self.assertEqual(result["dymphna"]["D_load"], 3.0)
+
+    def test_explain_decision_dymphna_overload_in_constraints(self) -> None:
+        """explain_decision constraints dict must report dymphna_ok=False on overload."""
+        state = State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+                      D_load=15.0, D_cap_eff=10.0)
+        result = explain_decision(state, legitimacy_ok=True, gdpr_result=_GDPR_PASS)
+        self.assertEqual(result["mode"], Mode.BLOCK.value)
+        self.assertFalse(result["constraints"]["dymphna_ok"])
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
