@@ -7,6 +7,7 @@ import { runArachne } from "./arachne";
 import { runLogos, classifyWithScope } from "./logos";
 import { runCerberus, resolveOlympiaRules } from "./olympia";
 import { runCastra } from "./castra";
+import { runValkyrie } from "./valkyrie";
 import { runTaoGate } from "./taogate";
 import { runAudit } from "./audit";
 import { evaluateImplicitPressure, routeImplicitPressure, taoGateSchema } from "./clinical";
@@ -79,6 +80,9 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
   const D_gate = gate.status;
   const D_scope = cerberusBlocked ? "BLOCK" as string : normaliseDecision(castraOut.result.hypatia.decision);
   const D_runtime = cerberusBlocked ? "BLOCK" as string : (castraOut.result.phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : "PASS");
+
+  const valkyrieResult = runValkyrie(D_gate, D_scope, D_runtime, gate.escalation);
+  steps.push(valkyrieResult.step);
 
   const taoGateResult = runTaoGate(D_gate, D_scope, D_runtime, gate.escalation);
   steps.push(...taoGateResult.steps);

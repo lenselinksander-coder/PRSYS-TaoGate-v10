@@ -44,6 +44,7 @@ The business logic is modularized into a pipeline service, which processes inten
 - **Logos**: Domain and keyword classification using scope data.
 - **Olympia**: Jurisdictional rule resolution and Cerberus gate enforcement.
 - **Castra**: Risk assessment (Hypatia for Impact x Probability, Phronesis for SI).
+- **Valkyrie**: Exposure guard — blocks unguarded exposure before TaoGate when escalation or high-risk decisions are pending.
 - **TaoGate**: Final decision lattice resolution and notifications.
 - **Audit**: Creation of audit records.
 - Specialized modules for clinical evaluation (e.g., `clinical.ts` for Implicit Pressure LLM evaluation).

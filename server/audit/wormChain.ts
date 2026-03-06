@@ -203,7 +203,7 @@ export function appendWormEntry(params: AppendWormParams): void {
 // ── S3 write ──────────────────────────────────────────────────────────────────
 
 async function writeEntryToS3(
-  client: S3Client,
+  client: InstanceType<typeof S3Client>,
   bucket: string,
   entry: WormEntry,
 ): Promise<void> {

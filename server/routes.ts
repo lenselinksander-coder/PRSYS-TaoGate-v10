@@ -636,7 +636,7 @@ export async function registerRoutes(
         else { const org = await storage.createOrganization(def); createdOrgs[def.name] = org.id; }
       }
 
-      const scopeDefs = [
+      const scopeDefs: Array<{name: string; description: string; orgName: string | null; isDefault: string; categories: any[]; documents: any[]; rules: any[]}> = [
         {
           name: "LEYEN", description: "EU AI Act — Deterministische pre-governance classificatie voor AI-systemen.", orgName: null, isDefault: "true",
           categories: [

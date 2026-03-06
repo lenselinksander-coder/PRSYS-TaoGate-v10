@@ -182,7 +182,7 @@ export async function runTrace(opts: TraceInput): Promise<TraceResult> {
   // ── Step 5: Hypatia (Risk) ────────────────────────────────────────────────
   let hypatia: HypatiaResult;
   if (cerberusBlocked) {
-    hypatia = { risk: 1.0, decision: "BLOCK", thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief." };
+    hypatia = { impact: 1.0, probability: 1.0, risk: 1.0, decision: "BLOCK" as const, thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief." };
     steps.push({
       name: "Hypatia",
       symbol: "⚖",
@@ -207,7 +207,7 @@ export async function runTrace(opts: TraceInput): Promise<TraceResult> {
   // ── Step 6: Phronesis (Capacity) ──────────────────────────────────────────
   let phronesis: PhronesisResult;
   if (cerberusBlocked) {
-    phronesis = { SI: 0, decision: "BLOCK", reason: "Overgeslagen — Cerberus BLOCK actief." };
+    phronesis = { tau: 0, omega: 0, SI: 0, risk: 1.0, overloaded: true, decision: "ESCALATE" as const, reason: "Overgeslagen — Cerberus BLOCK actief." };
     steps.push({
       name: "Phronesis",
       symbol: "🧭",
