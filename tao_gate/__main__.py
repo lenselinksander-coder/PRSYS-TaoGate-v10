@@ -17,6 +17,11 @@ Covers:
   - Scenario J : BLOCK  — INUIT Siku=0 does NOT relax BLOCK to HOLD.
   - Scenario K : BLOCK  — DYMPHNA overload (D_l > D_k^e) forces BLOCK.
   - Scenario L : PASS   — DYMPHNA within capacity; PASS allowed.
+
+  Valkyrie user-exposure firewall:
+  - Scenario M : PASS   — HDS=PASS, both Valkyries clear → user sees PASS.
+  - Scenario N : HOLD   — HDS=PASS, Valkyrie UX blocks dark patterns → user sees HOLD.
+  - Scenario O : BLOCK  — HDS=BLOCK (TI), Valkyries both clear → user still sees BLOCK.
 """
 
 from __future__ import annotations
@@ -29,6 +34,11 @@ from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.dymphna import dymphna_check
 from tao_gate.state import GateParams, Mode, State
 from tao_gate.supervisor import explain_decision, tao_gate_decide
+from tao_gate.valkyrie import (
+    valkyrie_inuit_check,
+    valkyrie_ux_check,
+    user_exposure_check,
+)
 
 # ── Shared parameters ────────────────────────────────────────────────────────
 
@@ -81,6 +91,30 @@ def _run(
     print(f"  Detail   : {json.dumps(result, indent=4)}")
     if mode != expected:
         print(f"  ASSERTION FAILED: expected {expected.value}, got {mode.value}",
+              file=sys.stderr)
+        sys.exit(1)
+
+
+def _run_valkyrie(
+    label: str,
+    hds_mode: Mode,
+    inuit_ctx: dict,
+    ux_ctx: dict,
+    expected: Mode,
+) -> None:
+    """Run a Valkyrie user-exposure scenario and print the result."""
+    v_inuit = valkyrie_inuit_check(inuit_ctx)
+    v_ux = valkyrie_ux_check(ux_ctx)
+    effective = user_exposure_check(hds_mode, v_inuit, v_ux)
+    status = "✓" if effective == expected else "✗"
+    print(f"\n{status} {label}")
+    print(f"  HDS mode      : {hds_mode.value}")
+    print(f"  V_INUIT       : {v_inuit.status.value} ({v_inuit.source})")
+    print(f"  V_UX          : {v_ux.status.value} ({v_ux.source})")
+    print(f"  Expected      : {expected.value}")
+    print(f"  Effective mode: {effective.value}")
+    if effective != expected:
+        print(f"  ASSERTION FAILED: expected {expected.value}, got {effective.value}",
               file=sys.stderr)
         sys.exit(1)
 
@@ -209,6 +243,35 @@ def main() -> None:
         legitimacy_ok=True,
         gdpr_result=_GDPR_PASS,
         expected=Mode.PASS,
+    )
+
+    # ── Valkyrie user-exposure firewall ──────────────────────────────────────
+
+    # M — PASS: HDS=PASS, both Valkyries clear → user sees PASS
+    _run_valkyrie(
+        "Scenario M · PASS (HDS=PASS, both Valkyries clear → user sees PASS)",
+        hds_mode=Mode.PASS,
+        inuit_ctx={},                    # field_access_ok and timing_ok default True
+        ux_ctx={},                       # dark_patterns_absent, ab_testing_safe, no_coercion default True
+        expected=Mode.PASS,
+    )
+
+    # N — HOLD: HDS=PASS, Valkyrie UX blocks dark patterns → user sees HOLD
+    _run_valkyrie(
+        "Scenario N · HOLD (HDS=PASS, Valkyrie UX blocks dark patterns → user sees HOLD)",
+        hds_mode=Mode.PASS,
+        inuit_ctx={},
+        ux_ctx={"dark_patterns_absent": False},
+        expected=Mode.HOLD,
+    )
+
+    # O — BLOCK: HDS=BLOCK (TI failure), both Valkyries clear → user still sees BLOCK
+    _run_valkyrie(
+        "Scenario O · BLOCK (HDS=BLOCK via TI, Valkyries clear → user sees BLOCK)",
+        hds_mode=Mode.BLOCK,
+        inuit_ctx={},
+        ux_ctx={},
+        expected=Mode.BLOCK,
     )
 
     print("\n" + "=" * 65)

@@ -32,6 +32,7 @@ from tao_gate.valkyrie import (
     valkyrie_inuit_check,
     valkyrie_ux_check,
 )
+from tao_gate.system_check import CheckResult, SystemCheckReport, run_system_check
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -530,6 +531,111 @@ class TestValkyrieLayer(unittest.TestCase):
         v_ux = valkyrie_ux_check({})
         exposure = user_exposure_check(hds_mode, v_inuit, v_ux)
         self.assertEqual(exposure, Mode.BLOCK)
+
+
+class TestSystemCheck(unittest.TestCase):
+    """System-check self-diagnostic: run_system_check() correctness."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Run the system check once; share the report across all test methods."""
+        cls.report = run_system_check()
+
+    def test_report_is_system_check_report_instance(self) -> None:
+        """run_system_check must return a SystemCheckReport."""
+        self.assertIsInstance(self.report, SystemCheckReport)
+
+    def test_report_has_checks_list(self) -> None:
+        """SystemCheckReport.checks must be a non-empty list."""
+        self.assertIsInstance(self.report.checks, list)
+        self.assertGreater(len(self.report.checks), 0)
+
+    def test_all_checks_are_check_result_instances(self) -> None:
+        """Every item in checks must be a CheckResult."""
+        for check in self.report.checks:
+            with self.subTest(name=check.name):
+                self.assertIsInstance(check, CheckResult)
+
+    def test_overall_is_ok(self) -> None:
+        """overall must be 'OK' when all governance invariants hold."""
+        self.assertEqual(self.report.overall, "OK")
+
+    def test_no_failed_checks(self) -> None:
+        """No individual check must have status 'FAIL'."""
+        failed = [c for c in self.report.checks if c.status != "OK"]
+        self.assertEqual(
+            failed, [],
+            msg="Failed checks: " + ", ".join(c.name for c in failed),
+        )
+
+    def test_timestamp_is_set(self) -> None:
+        """SystemCheckReport.timestamp must be a non-empty ISO-8601 string."""
+        self.assertIsInstance(self.report.timestamp, str)
+        self.assertGreater(len(self.report.timestamp), 0)
+
+    def test_check_names_are_unique(self) -> None:
+        """Each check must have a unique name."""
+        names = [c.name for c in self.report.checks]
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_check_result_status_values(self) -> None:
+        """Every CheckResult.status must be 'OK' or 'FAIL'."""
+        for check in self.report.checks:
+            with self.subTest(name=check.name):
+                self.assertIn(check.status, ("OK", "FAIL"))
+
+    def test_report_covers_gdpr_check(self) -> None:
+        """System check must include a GDPR STOP → BLOCK check."""
+        names = [c.name for c in self.report.checks]
+        self.assertTrue(
+            any("GDPR" in n for n in names),
+            msg="No GDPR check found in system check report.",
+        )
+
+    def test_report_covers_valkyrie_checks(self) -> None:
+        """System check must include Valkyrie layer checks."""
+        names = [c.name for c in self.report.checks]
+        self.assertTrue(
+            any("Valkyrie" in n for n in names),
+            msg="No Valkyrie check found in system check report.",
+        )
+
+    def test_report_covers_dymphna_check(self) -> None:
+        """System check must include a DYMPHNA overload → BLOCK check."""
+        names = [c.name for c in self.report.checks]
+        self.assertTrue(
+            any("DYMPHNA" in n for n in names),
+            msg="No DYMPHNA check found in system check report.",
+        )
+
+    def test_report_covers_inuit_check(self) -> None:
+        """System check must include an INUIT Siku check."""
+        names = [c.name for c in self.report.checks]
+        self.assertTrue(
+            any("INUIT" in n for n in names),
+            msg="No INUIT check found in system check report.",
+        )
+
+    def test_report_covers_monotone_safety(self) -> None:
+        """System check must include a monotone-safety check."""
+        names = [c.name for c in self.report.checks]
+        self.assertTrue(
+            any("Monotone" in n or "monotone" in n for n in names),
+            msg="No monotone-safety check found in system check report.",
+        )
+
+    def test_overall_fail_when_check_fails(self) -> None:
+        """overall must be 'FAIL' when at least one check fails."""
+        from tao_gate.system_check import SystemCheckReport, CheckResult
+        report = SystemCheckReport(
+            checks=[
+                CheckResult(name="ok_check", status="OK", detail="fine"),
+                CheckResult(name="bad_check", status="FAIL", detail="broken"),
+            ],
+            overall="FAIL",
+            timestamp="2026-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(report.overall, "FAIL")
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────

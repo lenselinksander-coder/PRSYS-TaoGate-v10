@@ -174,6 +174,57 @@ The `DymphnaSignal` is auto-derived from `state.D_load` and `state.D_cap_eff` wh
 
 ---
 
+## Valkyrie Layer — User Exposure Firewall
+
+Implemented in `tao_gate/valkyrie.py`.
+
+Even when TaoGate emits PASS, user-facing output is still gated by two independent Valkyrie checks before any outcome may reach a human.
+
+### Valkyrie INUIT — field access & timing protection
+
+Decides whether, when, and under which conditions a sanctioned outcome may enter a human field at all.
+
+| Key               | Meaning                                                                            |
+|-------------------|------------------------------------------------------------------------------------|
+| `field_access_ok` | False when the target field cannot safely receive the outcome (consent, crisis, channel). |
+| `timing_ok`       | False when the timing is inappropriate (stress window, night delivery, cooling-off). |
+
+### Valkyrie UX — ethics firewall
+
+Ensures that what is ethically mandated actually lands without manipulation, overloading, or harmful timing.
+
+| Key                   | Meaning                                                                     |
+|-----------------------|-----------------------------------------------------------------------------|
+| `dark_patterns_absent`| False when the UX contains dark patterns (hidden unsubscribe, roach motel). |
+| `ab_testing_safe`     | False when dopamine-trigger A/B testing or manipulative optimisation is used.|
+| `no_coercion`         | False when the UX applies coercive pressure (countdown timers, guilt-tripping).|
+
+### User exposure rule
+
+```
+Exposure allowed  ⟺  Mode = PASS  ∧  V_INUIT = OK  ∧  V_UX = OK
+```
+
+Operationally:
+- If Mode = PASS and any Valkyrie check fails → effective mode becomes **HOLD**.
+- If Mode ∈ {HOLD, BLOCK} → effective mode is returned **unchanged** (Valkyries cannot relax).
+
+The Valkyrie layer is *monotone-safe*: it can only tighten PASS → HOLD; it never relaxes HOLD or BLOCK.
+
+---
+
+## System Check
+
+The governance kernel includes a self-diagnostic that validates all invariants:
+
+```
+python -m tao_gate.system_check
+```
+
+The check covers all 17 governance properties across every layer (GateParams, instability, O36, SI/TI, GDPR, Cerberus, Barbatos, DYMPHNA, INUIT, Valkyrie, explain_decision). It returns exit code 0 on full health and exit code 1 if any invariant is violated.
+
+---
+
 ## Governance Invariants
 
 1. **GDPR STOP → BLOCK** — unconditional, overrides all other signals.
@@ -181,4 +232,5 @@ The `DymphnaSignal` is auto-derived from `state.D_load` and `state.D_cap_eff` wh
 3. **No relaxation** — supervisory logic (INUIT, V(x) threshold) can tighten PASS → HOLD; it never relaxes HOLD → PASS or BLOCK → HOLD/PASS.
 4. **Siku ∩ Decision = ∅** — INUIT is a sensor only; it cannot override hard constraints.
 5. **DYMPHNA is hard** — D_l > D_k^e always produces BLOCK, regardless of INUIT or instability.
+6. **Valkyrie is monotone** — Valkyrie checks can only tighten PASS → HOLD; they never relax HOLD or BLOCK.
 

@@ -26,6 +26,7 @@ from tao_gate.valkyrie import (
     valkyrie_ux_check,
     user_exposure_check,
 )
+from tao_gate.system_check import CheckResult, SystemCheckReport, run_system_check
 
 __all__ = [
     "Mode",
@@ -42,4 +43,7 @@ __all__ = [
     "valkyrie_inuit_check",
     "valkyrie_ux_check",
     "user_exposure_check",
+    "CheckResult",
+    "SystemCheckReport",
+    "run_system_check",
 ]
