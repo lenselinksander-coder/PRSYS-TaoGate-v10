@@ -14,6 +14,7 @@ import {
   resolveOlympiaRules,
   preflightCheck,
 } from "./pipeline";
+import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -713,6 +714,22 @@ export async function registerRoutes(
         scopes: created,
         totals: { organizations: finalOrgs.length, scopes: finalScopes.length },
       });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/algoritmeregister", async (_req, res) => {
+    try {
+      const results = await syncAlgoritmeregister();
+      return res.json(
+        results.map((r) => ({
+          algorithm: r.algorithm_id,
+          organization: r.organization,
+          decision: r.decision,
+          risk_score: r.risk_score,
+        }))
+      );
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
