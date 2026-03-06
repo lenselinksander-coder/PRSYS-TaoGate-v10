@@ -9,7 +9,8 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test:e2e": "node_modules/.bin/tsx --test server/fsm/__tests__/e2e-pipeline.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1000.0",

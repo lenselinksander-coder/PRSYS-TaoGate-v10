@@ -317,9 +317,96 @@ function clinicalGate(input) {
   };
 }
 
+// ── Canon checks (must mirror gateSystem.ts) ─────────────────────────────────
+
+var POLITICAL_MANIPULATION_PATTERNS = [
+  /stem.*(advies|gedrag|voorkeur|bei.nvloed)/,
+  /verkiezing.*(campagne|fraude|ondermijn|bei.nvloed)/,
+  /kiezers?.*(segmentat|targeting|manipul|profiler)/,
+  /politiek.*(overtuiging|invloed|manipul|sturen)/,
+  /\\b(polariseren|polarisatie|desinformatie|nepnieuws|fake\\s*news)\\b/,
+  /\\blaat\\b.*\\bstemmen\\s+op\\b/,
+  /manipul\\w*.*\\b(kiezers|stemm|verkiezing|publieke\\s+opinie)\\b/,
+  /\\b(kiezers|stemm|verkiezing|publieke\\s+opinie)\\b.*manipul/,
+  /bei.nvloed.*\\b(stemgedrag|verkiezing|electoraat|kiezers)\\b/,
+  /\\b(stemgedrag|verkiezing|electoraat|kiezers)\\b.*bei.nvloed/,
+  /twijfel.*(zaaien|verkiezingsuitslag)/,
+  /target.*(advertentie|campagne).*(politiek|kiezers|zwakke)/,
+  /\\bai\\b.*(kiezers|verkiezing).*manipul/,
+  /electorale?\\s*profiler/
+];
+
+var POLITICAL_OBSERVATION_GUARD = [
+  /^(de|het|een)\\b.*\\b(uitslag|resultaat|telling|opkomst|percentage|opinie|peiling)\\b.*\\b(is|was|werd|zijn|waren|staat|toont|laat\\s+zien)\\b/,
+  /\\b(verkiezingsuitslag|opkomstcijfer|stempercentage|opkomstpercentage|exitpoll)\\b.*\\b(is|was|bekend|gepubliceerd|vastgesteld|bekendgemaakt)\\b/,
+  /\\b(verkiezing|stemming|referendum)\\b.*\\b(plaatsgevonden|gehouden|afgelopen|voorbij|geweest)\\b/,
+  /\\b(analyse|onderzoek|rapport|studie|beschrijving|evaluatie|overzicht)\\b.*\\b(verkiezing|stem|kiezer|politiek|stemgedrag)\\b/,
+  /\\b(verkiezing|stem|kiezer|politiek|stemgedrag)\\b.*\\b(analyse|onderzoek|rapport|studie|statistiek|trend|beschrijving)\\b/
+];
+
+var GDPR_PERSONAL_DATA_PATTERNS = [
+  "naam", "adres", /telefoon\\w*/, "e-mail", "email", "mailinglijst",
+  "burgerservicenummer", "bsn", "geboortedatum",
+  /medisch\\w*\\s*(gegeven|dossier)/, "diagnose",
+  /locatie\\s*gegeven/, /gps[\\s-]*gegeven/,
+  "identiteitsbewijs", "paspoort", "id-kaart", "rijbewijs",
+  "gezichtsherkenning", /biometrisch\\w*\\s*gegeven/,
+  /persoons\\s*gegeven/, /persoonlijk\\w*\\s*gegeven/,
+  "ip-adres", "cookie", "vingerafdruk",
+  /e[\\s-]*mail\\s*adres/
+];
+
+var GDPR_PROCESSING_VERBS = [
+  "verzamel", "verzamelen", "opslaan", "bewaar", "bewaren",
+  "maak een lijst", "lijst maken", "database",
+  "exporteer", "exporteren", "delen", "uitwisselen",
+  "verkopen", "verkoop", "profileren", "profileer",
+  "koppel", "combineren", "aan elkaar koppelen",
+  "scrapen", "harvesten", "downloaden", "kopieer", "kopi\u00ebren",
+  "doorsturen", "versturen", "uploaden"
+];
+
+function canonPoliticalCheck(lower) {
+  for (var i = 0; i < POLITICAL_OBSERVATION_GUARD.length; i++) {
+    if (POLITICAL_OBSERVATION_GUARD[i].test(lower)) return null;
+  }
+  var matched = hits(lower, POLITICAL_MANIPULATION_PATTERNS);
+  if (matched.length === 0) return null;
+  return {
+    status: "BLOCK",
+    layer: "CANON_A1",
+    band: "POLITICAL_MANIPULATION",
+    pressure: "INFINITE",
+    escalation: "AI_OFFICE_TOEZICHTHOUDER",
+    reason: "Constitutionele weigering: politieke manipulatie gedetecteerd (Canon A1 — EU AI Act Art. 5(1)(a)).",
+    signals: { matched: matched, canon: "A1", source: "EU AI Act Art. 5(1)(a)" }
+  };
+}
+
+function canonGdprCheck(lower) {
+  var dataHits = hits(lower, GDPR_PERSONAL_DATA_PATTERNS);
+  if (dataHits.length === 0) return null;
+  var verbHits = hits(lower, GDPR_PROCESSING_VERBS);
+  if (verbHits.length === 0) return null;
+  return {
+    status: "BLOCK",
+    layer: "CANON_A2",
+    band: "PERSONAL_DATA_PROCESSING",
+    pressure: "INFINITE",
+    escalation: "DATA_PROTECTION_OFFICER",
+    reason: "AVG/GDPR: (vermoedelijke) onrechtmatige verwerking van persoonsgegevens (Canon A2).",
+    signals: { dataPatterns: dataHits, processingVerbs: verbHits, canon: "A2", source: "AVG/GDPR" }
+  };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────────────
 
 function runGate(input, profile) {
+  var lower = normalize(input);
+  var canonBlock = canonPoliticalCheck(lower);
+  if (canonBlock) return canonBlock;
+  var gdprBlock = canonGdprCheck(lower);
+  if (gdprBlock) return gdprBlock;
   switch (profile) {
     case "CLINICAL":    return clinicalGate(input);
     case "FINANCIAL":   return financialGate(input);
