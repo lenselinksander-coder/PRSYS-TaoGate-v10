@@ -15,6 +15,8 @@ Covers:
   - Scenario H : HOLD   — INUIT Siku=0 tightens PASS to HOLD.
   - Scenario I : PASS   — INUIT Siku=1 (sufficient capacity); PASS allowed.
   - Scenario J : BLOCK  — INUIT Siku=0 does NOT relax BLOCK to HOLD.
+  - Scenario K : BLOCK  — DYMPHNA overload (D_l > D_k^e) forces BLOCK.
+  - Scenario L : PASS   — DYMPHNA within capacity; PASS allowed.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import sys
 
 from tao_gate.gdpr_bridge import DecisionResult, GdprDecision, gdpr_personal_data_check
 from tao_gate.inuit import InuitSignal, inuit_context_check
+from tao_gate.dymphna import dymphna_check
 from tao_gate.state import GateParams, Mode, State
 from tao_gate.supervisor import explain_decision, tao_gate_decide
 
@@ -64,10 +67,11 @@ def _run(
     gdpr_result: DecisionResult,
     expected: Mode,
     inuit_signal: InuitSignal | None = None,
+    dymphna_signal=None,
 ) -> None:
     result = explain_decision(
         state, legitimacy_ok, gdpr_result=gdpr_result,
-        inuit_signal=inuit_signal, params=PARAMS
+        inuit_signal=inuit_signal, dymphna_signal=dymphna_signal, params=PARAMS
     )
     mode = Mode(result["mode"])
     status = "✓" if mode == expected else "✗"
@@ -185,6 +189,26 @@ def main() -> None:
         gdpr_result=_GDPR_PASS,
         expected=Mode.BLOCK,
         inuit_signal=inuit_context_check({"biology_signal_ok": False}),
+    )
+
+    # K — BLOCK: DYMPHNA overload forces BLOCK (D_load=12 > D_cap_eff=10)
+    _run(
+        "Scenario K · BLOCK (DYMPHNA overload: D_l=12 > D_k^e=10)",
+        State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+              D_load=12.0, D_cap_eff=10.0),
+        legitimacy_ok=True,
+        gdpr_result=_GDPR_PASS,
+        expected=Mode.BLOCK,
+    )
+
+    # L — PASS: DYMPHNA within capacity (D_load=5 <= D_cap_eff=10); PASS allowed
+    _run(
+        "Scenario L · PASS (DYMPHNA within capacity: D_l=5 <= D_k^e=10)",
+        State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9,
+              D_load=5.0, D_cap_eff=10.0),
+        legitimacy_ok=True,
+        gdpr_result=_GDPR_PASS,
+        expected=Mode.PASS,
     )
 
     print("\n" + "=" * 65)

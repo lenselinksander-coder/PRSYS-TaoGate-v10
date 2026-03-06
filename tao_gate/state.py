@@ -3,7 +3,8 @@ tao_gate/state.py — Core types for the ORFHEUSS governance kernel.
 
 Defines:
   - Mode        : discrete modes of ORFHEUSS (PASS / HOLD / BLOCK).
-  - State       : continuous state vector x = (Delta_ext, sigma_ext, omega, tau, TI).
+  - State       : continuous state vector
+                  x = (Delta_ext, sigma_ext, omega, tau, TI, D_load, D_cap_eff).
   - GateParams  : tunable coefficients (alpha, beta, gamma, V_max, TI_min).
   - instability : V(x) = alpha * Delta_ext^2 + beta * sigma_ext^2 + gamma * omega^2.
 """
@@ -45,6 +46,12 @@ class State:
         Current temporal reference point (mandate horizon).
     TI : float
         Temporal integrity index — must stay >= TI_min.
+    D_load : float
+        DYMPHNA cumulative load D_l(t) = Σ (load × duration).
+        Defaults to 0.0 (no accumulated load).
+    D_cap_eff : float
+        DYMPHNA effective capacity D_k^e.  When D_load > D_cap_eff the
+        system enters dysregulation.  Defaults to +∞ (unconstrained).
     """
 
     Delta_ext: float
@@ -52,6 +59,8 @@ class State:
     omega: float
     tau: float
     TI: float
+    D_load: float = 0.0
+    D_cap_eff: float = float("inf")
 
 
 @dataclass(frozen=True)

@@ -11,10 +11,11 @@ Decision logic (in priority order):
        - |Delta_ext| > sqrt(V_max / alpha)             (Barbatos)
        - omega > tau - sigma_ext                       (O36 / carrying capacity)
        - TI < TI_min                                   (SI/TI temporal stability)
+       - D_load > D_cap_eff                            (DYMPHNA / cumulative load)
   2. HOLD  — if V(x) >= V_hold_ratio * V_max (approaching the safety boundary).
-  3. PASS  — all constraints satisfied and V(x) well below V_max.
-  4. INUIT post-filter — if Siku = 0, any PASS result is tightened to HOLD.
+  3. INUIT post-filter — if Siku = 0, any PASS result is tightened to HOLD.
      (Supervisory logic may only tighten decisions, never relax them.)
+  4. PASS  — all constraints satisfied and V(x) well below V_max.
 
 All functions are pure (no I/O, no global state mutations).
 """
@@ -27,6 +28,7 @@ from typing import Any
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
 from tao_gate.gdpr_bridge import DecisionResult, GdprDecision
 from tao_gate.inuit import InuitSignal
+from tao_gate.dymphna import DymphnaSignal, dymphna_check
 
 
 # Default parameter set used when no explicit GateParams are supplied.
@@ -39,6 +41,7 @@ def tao_gate_decide(
     *,
     gdpr_result: DecisionResult | None = None,
     inuit_signal: InuitSignal | None = None,
+    dymphna_signal: DymphnaSignal | None = None,
     params: GateParams = _DEFAULT_PARAMS,
 ) -> Mode:
     """
@@ -47,7 +50,8 @@ def tao_gate_decide(
     Parameters
     ----------
     state : State
-        Current continuous state vector x = (Delta_ext, sigma_ext, omega, tau, TI).
+        Current continuous state vector
+        x = (Delta_ext, sigma_ext, omega, tau, TI, D_load, D_cap_eff).
     legitimacy_ok : bool
         True when Cerberus confirms that the agent mandate, time window and
         reversibility requirements are all satisfied.
@@ -58,9 +62,12 @@ def tao_gate_decide(
     inuit_signal : InuitSignal | None
         Output of the INUIT · BIOLOGY pre-reflexive context sensor.
         If ``None`` the INUIT constraint is treated as clear (Siku = 1).
-        When ``siku == 0``, any Mode.PASS result is tightened to Mode.HOLD,
-        because insufficient relational/cultural carrying capacity prevents
-        unconditional PASS — but does not necessarily force a full BLOCK.
+        When ``siku == 0``, any Mode.PASS result is tightened to Mode.HOLD.
+    dymphna_signal : DymphnaSignal | None
+        DYMPHNA cumulative-load sensor output.  If ``None``, the signal is
+        derived automatically from ``state.D_load`` and ``state.D_cap_eff``.
+        When ``overloaded=True`` (D_l > D_k^e), Mode.BLOCK is forced
+        (hard constraint — dysregulation must not proceed).
     params : GateParams
         Tunable coefficients (alpha, beta, gamma, V_max, TI_min …).
         Defaults to :data:`_DEFAULT_PARAMS`.
@@ -77,6 +84,9 @@ def tao_gate_decide(
     satisfied constraints.  The INUIT post-filter can only tighten the
     outcome (PASS → HOLD); it never relaxes HOLD or BLOCK.
     """
+    # Resolve DYMPHNA signal: auto-derive from state if not provided.
+    _dymphna = dymphna_signal if dymphna_signal is not None else dymphna_check(state)
+
     # ── 1. Hard constraint checks (any failure → BLOCK) ─────────────────────
 
     # 1a. GDPR / PrivacyGate — STOP overrides everything.
@@ -102,6 +112,11 @@ def tao_gate_decide(
 
     # 1e. SI/TI — temporal integrity index must be >= TI_min.
     if state.TI < params.TI_min:
+        return Mode.BLOCK
+
+    # 1f. DYMPHNA — cumulative load must not exceed effective capacity.
+    #     D_l > D_k^e signals dysregulation; no decision may proceed.
+    if _dymphna.overloaded:
         return Mode.BLOCK
 
     # ── 2. Soft threshold check (V(x) approaching V_max → HOLD) ─────────────
@@ -131,6 +146,7 @@ def explain_decision(
     *,
     gdpr_result: DecisionResult | None = None,
     inuit_signal: InuitSignal | None = None,
+    dymphna_signal: DymphnaSignal | None = None,
     params: GateParams = _DEFAULT_PARAMS,
 ) -> dict[str, Any]:
     """
@@ -149,17 +165,24 @@ def explain_decision(
     inuit_signal : InuitSignal | None
         INUIT · BIOLOGY context sensor result (optional).
         When ``siku == 0``, any PASS result is tightened to HOLD.
+    dymphna_signal : DymphnaSignal | None
+        DYMPHNA cumulative-load sensor result (optional).
+        When ``overloaded=True``, Mode.BLOCK is forced.
+        If ``None``, auto-derived from ``state.D_load`` / ``state.D_cap_eff``.
     params : GateParams
         Tunable coefficients.
 
     Returns
     -------
     dict[str, Any]
-        Keys: ``mode``, ``V``, ``V_max``, ``constraints``, ``inuit``.
+        Keys: ``mode``, ``V``, ``V_max``, ``constraints``, ``inuit``,
+        ``dymphna``.
     """
+    _dymphna = dymphna_signal if dymphna_signal is not None else dymphna_check(state)
+
     mode = tao_gate_decide(
         state, legitimacy_ok, gdpr_result=gdpr_result,
-        inuit_signal=inuit_signal, params=params
+        inuit_signal=inuit_signal, dymphna_signal=_dymphna, params=params
     )
     v = instability(state, params)
     delta_max = math.sqrt(params.V_max / params.alpha) if params.alpha > 0 else math.inf
@@ -171,12 +194,24 @@ def explain_decision(
         "delta_in_bounds": abs(state.Delta_ext) <= delta_max,
         "omega_in_capacity": state.omega <= omega_cap,
         "ti_sufficient": state.TI >= params.TI_min,
+        "dymphna_ok": not _dymphna.overloaded,
     }
 
     inuit_info: dict[str, Any] = {
         "siku": inuit_signal.siku if inuit_signal is not None else 1,
         "reason": inuit_signal.reason if inuit_signal is not None else "INUIT not evaluated.",
         "source": inuit_signal.source if inuit_signal is not None else "none",
+    }
+
+    # D_cap_eff may be float('inf') — represent as null in JSON-safe dict.
+    d_cap_eff_value: Any = (
+        _dymphna.D_cap_eff if math.isfinite(_dymphna.D_cap_eff) else None
+    )
+    dymphna_info: dict[str, Any] = {
+        "D_load": _dymphna.D_load,
+        "D_cap_eff": d_cap_eff_value,
+        "overloaded": _dymphna.overloaded,
+        "reason": _dymphna.reason,
     }
 
     return {
@@ -186,4 +221,5 @@ def explain_decision(
         "V_hold_threshold": round(params.V_hold_ratio * params.V_max, 6),
         "constraints": constraints,
         "inuit": inuit_info,
+        "dymphna": dymphna_info,
     }
