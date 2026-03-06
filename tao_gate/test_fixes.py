@@ -8,6 +8,7 @@ Tests cover:
   4. Governance invariants: GDPR STOP always produces BLOCK; no BLOCK→PASS relaxation.
   5. INUIT · BIOLOGY: Siku ∈ {0,1}; Siku=0 tightens PASS→HOLD; cannot relax BLOCK.
   6. DYMPHNA: D_l > D_k^e forces BLOCK; DymphnaSignal validation; explain_decision keys.
+  7. Valkyrie layer: user-exposure firewall (V_INUIT, V_UX checks, user_exposure_check).
 
 Run with:
     python -m tao_gate.test_fixes
@@ -24,6 +25,13 @@ from tao_gate.gdpr_bridge import DecisionResult, GdprDecision
 from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
 from tao_gate.supervisor import explain_decision, tao_gate_decide
+from tao_gate.valkyrie import (
+    ValkyrieSignal,
+    ValkyrieStatus,
+    user_exposure_check,
+    valkyrie_inuit_check,
+    valkyrie_ux_check,
+)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -345,6 +353,183 @@ class TestDymphna(unittest.TestCase):
         result = explain_decision(state, legitimacy_ok=True, gdpr_result=_GDPR_PASS)
         self.assertEqual(result["mode"], Mode.BLOCK.value)
         self.assertFalse(result["constraints"]["dymphna_ok"])
+
+
+class TestValkyrieLayer(unittest.TestCase):
+    """Valkyrie layer — user-exposure firewall (V_INUIT + V_UX checks)."""
+
+    # ── ValkyrieStatus enum ───────────────────────────────────────────────
+
+    def test_valkyrie_status_values(self) -> None:
+        """ValkyrieStatus must have OK and FAIL members."""
+        self.assertEqual(ValkyrieStatus.OK.value, "OK")
+        self.assertEqual(ValkyrieStatus.FAIL.value, "FAIL")
+
+    # ── Valkyrie INUIT ────────────────────────────────────────────────────
+
+    def test_valkyrie_inuit_all_clear_returns_ok(self) -> None:
+        """Empty context (all defaults True) must return OK."""
+        sig = valkyrie_inuit_check({})
+        self.assertEqual(sig.status, ValkyrieStatus.OK)
+        self.assertEqual(sig.source, "all_clear")
+
+    def test_valkyrie_inuit_field_access_false_returns_fail(self) -> None:
+        """field_access_ok=False must produce FAIL."""
+        sig = valkyrie_inuit_check({"field_access_ok": False})
+        self.assertEqual(sig.status, ValkyrieStatus.FAIL)
+        self.assertEqual(sig.source, "field_access")
+
+    def test_valkyrie_inuit_timing_false_returns_fail(self) -> None:
+        """timing_ok=False must produce FAIL."""
+        sig = valkyrie_inuit_check({"timing_ok": False})
+        self.assertEqual(sig.status, ValkyrieStatus.FAIL)
+        self.assertEqual(sig.source, "timing")
+
+    def test_valkyrie_inuit_both_conditions_true_returns_ok(self) -> None:
+        """Explicit True for all keys must return OK."""
+        sig = valkyrie_inuit_check({"field_access_ok": True, "timing_ok": True})
+        self.assertEqual(sig.status, ValkyrieStatus.OK)
+
+    # ── Valkyrie UX ───────────────────────────────────────────────────────
+
+    def test_valkyrie_ux_all_clear_returns_ok(self) -> None:
+        """Empty context (all defaults True) must return OK."""
+        sig = valkyrie_ux_check({})
+        self.assertEqual(sig.status, ValkyrieStatus.OK)
+        self.assertEqual(sig.source, "all_clear")
+
+    def test_valkyrie_ux_dark_patterns_detected_returns_fail(self) -> None:
+        """dark_patterns_absent=False must produce FAIL."""
+        sig = valkyrie_ux_check({"dark_patterns_absent": False})
+        self.assertEqual(sig.status, ValkyrieStatus.FAIL)
+        self.assertEqual(sig.source, "dark_patterns")
+
+    def test_valkyrie_ux_ab_testing_unsafe_returns_fail(self) -> None:
+        """ab_testing_safe=False must produce FAIL."""
+        sig = valkyrie_ux_check({"ab_testing_safe": False})
+        self.assertEqual(sig.status, ValkyrieStatus.FAIL)
+        self.assertEqual(sig.source, "ab_testing")
+
+    def test_valkyrie_ux_coercion_detected_returns_fail(self) -> None:
+        """no_coercion=False must produce FAIL."""
+        sig = valkyrie_ux_check({"no_coercion": False})
+        self.assertEqual(sig.status, ValkyrieStatus.FAIL)
+        self.assertEqual(sig.source, "coercion")
+
+    def test_valkyrie_ux_all_explicit_true_returns_ok(self) -> None:
+        """Explicit True for all keys must return OK."""
+        sig = valkyrie_ux_check({
+            "dark_patterns_absent": True,
+            "ab_testing_safe": True,
+            "no_coercion": True,
+        })
+        self.assertEqual(sig.status, ValkyrieStatus.OK)
+
+    # ── user_exposure_check — the combined firewall ───────────────────────
+
+    def test_pass_both_ok_allows_exposure(self) -> None:
+        """Mode.PASS + both Valkyries OK → effective mode is PASS."""
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        result = user_exposure_check(Mode.PASS, v_inuit, v_ux)
+        self.assertEqual(result, Mode.PASS)
+
+    def test_pass_inuit_fail_holds_exposure(self) -> None:
+        """Mode.PASS + V_INUIT FAIL → effective mode is HOLD (boundary hold)."""
+        v_inuit = valkyrie_inuit_check({"field_access_ok": False})
+        v_ux = valkyrie_ux_check({})
+        result = user_exposure_check(Mode.PASS, v_inuit, v_ux)
+        self.assertEqual(result, Mode.HOLD)
+
+    def test_pass_ux_fail_holds_exposure(self) -> None:
+        """Mode.PASS + V_UX FAIL → effective mode is HOLD (boundary hold)."""
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({"dark_patterns_absent": False})
+        result = user_exposure_check(Mode.PASS, v_inuit, v_ux)
+        self.assertEqual(result, Mode.HOLD)
+
+    def test_pass_both_fail_holds_exposure(self) -> None:
+        """Mode.PASS + both Valkyries FAIL → effective mode is HOLD."""
+        v_inuit = valkyrie_inuit_check({"timing_ok": False})
+        v_ux = valkyrie_ux_check({"no_coercion": False})
+        result = user_exposure_check(Mode.PASS, v_inuit, v_ux)
+        self.assertEqual(result, Mode.HOLD)
+
+    def test_hold_both_ok_stays_hold(self) -> None:
+        """Mode.HOLD + both Valkyries OK → effective mode remains HOLD."""
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        result = user_exposure_check(Mode.HOLD, v_inuit, v_ux)
+        self.assertEqual(result, Mode.HOLD)
+
+    def test_hold_both_fail_stays_hold(self) -> None:
+        """Valkyries cannot relax HOLD; result stays HOLD regardless of their status."""
+        v_inuit = valkyrie_inuit_check({"field_access_ok": False})
+        v_ux = valkyrie_ux_check({"ab_testing_safe": False})
+        result = user_exposure_check(Mode.HOLD, v_inuit, v_ux)
+        self.assertEqual(result, Mode.HOLD)
+
+    def test_block_both_ok_stays_block(self) -> None:
+        """Mode.BLOCK + both Valkyries OK → effective mode remains BLOCK."""
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        result = user_exposure_check(Mode.BLOCK, v_inuit, v_ux)
+        self.assertEqual(result, Mode.BLOCK)
+
+    def test_block_both_fail_stays_block(self) -> None:
+        """Valkyries cannot relax BLOCK; result stays BLOCK regardless of their status."""
+        v_inuit = valkyrie_inuit_check({"timing_ok": False})
+        v_ux = valkyrie_ux_check({"no_coercion": False})
+        result = user_exposure_check(Mode.BLOCK, v_inuit, v_ux)
+        self.assertEqual(result, Mode.BLOCK)
+
+    def test_valkyries_cannot_convert_hold_to_pass(self) -> None:
+        """Valkyries with both OK must never elevate HOLD to PASS."""
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        result = user_exposure_check(Mode.HOLD, v_inuit, v_ux)
+        self.assertNotEqual(result, Mode.PASS)
+
+    def test_valkyries_cannot_convert_block_to_pass(self) -> None:
+        """Valkyries with both OK must never elevate BLOCK to PASS."""
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        result = user_exposure_check(Mode.BLOCK, v_inuit, v_ux)
+        self.assertNotEqual(result, Mode.PASS)
+
+    # ── End-to-end integration ────────────────────────────────────────────
+
+    def test_end_to_end_pass_with_clear_valkyries(self) -> None:
+        """Full pipeline: HDS decides PASS + clear Valkyries → user sees PASS."""
+        hds_mode = tao_gate_decide(_HEALTHY_STATE, legitimacy_ok=True,
+                                   gdpr_result=_GDPR_PASS)
+        self.assertEqual(hds_mode, Mode.PASS)
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        exposure = user_exposure_check(hds_mode, v_inuit, v_ux)
+        self.assertEqual(exposure, Mode.PASS)
+
+    def test_end_to_end_pass_blocked_by_valkyrie_ux(self) -> None:
+        """Full pipeline: HDS decides PASS but UX check fails → user sees HOLD."""
+        hds_mode = tao_gate_decide(_HEALTHY_STATE, legitimacy_ok=True,
+                                   gdpr_result=_GDPR_PASS)
+        self.assertEqual(hds_mode, Mode.PASS)
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({"dark_patterns_absent": False})
+        exposure = user_exposure_check(hds_mode, v_inuit, v_ux)
+        self.assertEqual(exposure, Mode.HOLD)
+
+    def test_end_to_end_block_not_affected_by_valkyries(self) -> None:
+        """Full pipeline: HDS decides BLOCK → user sees BLOCK regardless of Valkyries."""
+        blocked_state = State(Delta_ext=0.1, sigma_ext=0.0, omega=0.0,
+                              tau=5.0, TI=0.1)
+        hds_mode = tao_gate_decide(blocked_state, legitimacy_ok=True,
+                                   gdpr_result=_GDPR_PASS)
+        self.assertEqual(hds_mode, Mode.BLOCK)
+        v_inuit = valkyrie_inuit_check({})
+        v_ux = valkyrie_ux_check({})
+        exposure = user_exposure_check(hds_mode, v_inuit, v_ux)
+        self.assertEqual(exposure, Mode.BLOCK)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
