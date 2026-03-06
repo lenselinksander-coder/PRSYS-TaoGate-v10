@@ -401,7 +401,7 @@ function _executeTaoGateInner(
     }
     axiomsSatisfied.push("A10_BOUNDED_EXECUTION");
     recordTimeoutEvent(false);
-  } catch (err: any) {
+  } catch (err: unknown) {
     const elapsed = performance.now() - startTime;
     axiomsViolated.push("A10_BOUNDED_EXECUTION");
     recordTimeoutEvent(true);
@@ -411,7 +411,7 @@ function _executeTaoGateInner(
       canon,
       result: null,
       hard_block: true,
-      hard_block_reason: `A10 EXECUTION ERROR: ${err?.message || String(err)}`,
+      hard_block_reason: `A10 EXECUTION ERROR: ${err instanceof Error ? err.message : String(err)}`,
       processing_ms: elapsed,
       physics: toLogEntry(dc.decision_hash, prePhysics),
       axioms_satisfied: axiomsSatisfied,

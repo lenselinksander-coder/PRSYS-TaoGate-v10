@@ -1,5 +1,7 @@
 // server/clinicalGate.ts
 
+import { normalize, hits } from "./utils/patternMatching";
+
 export type ClinicalGateStatus =
   | "PASS"
   | "PASS_WITH_TRANSPARENCY"
@@ -35,26 +37,6 @@ export type ClinicalGateResult = {
     matched: string[];
   };
 };
-
-function normalize(input: string): string {
-  return (input ?? "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// Utility: does the text contain any of these patterns?
-function hits(lower: string, patterns: (string | RegExp)[]): string[] {
-  const matched: string[] = [];
-  for (const p of patterns) {
-    if (typeof p === "string") {
-      if (lower.includes(p)) matched.push(p);
-    } else {
-      if (p.test(lower)) matched.push(String(p));
-    }
-  }
-  return matched;
-}
 
 // NOTE: keep it conservative. We only want to allow "observations", not commands.
 const IMPERATIVE_PATTERNS: (string | RegExp)[] = [

@@ -1,4 +1,4 @@
-export function repairPdfJson(text: string): any {
+export function repairPdfJson(text: string): unknown {
   let cleaned = text
     .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
     .replace(/[\u2018\u2019]/g, "'")

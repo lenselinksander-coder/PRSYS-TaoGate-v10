@@ -220,7 +220,7 @@ export async function gatewayClassify(opts: {
   }));
 
   let implicitPressureOverride: ReturnType<typeof routeImplicitPressure> = null;
-  let llmSignals: any = null;
+  let llmSignals: Awaited<ReturnType<typeof evaluateImplicitPressure>> = null;
 
   if (gateProfile === "CLINICAL" && (gate.status === "PASS" || gate.status === "PASS_WITH_TRANSPARENCY")) {
     llmSignals = await evaluateImplicitPressure(text);

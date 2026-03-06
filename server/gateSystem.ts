@@ -1,5 +1,6 @@
 import { clinicalGate, type ClinicalGateResult } from "./clinicalGate";
 import type { GateProfile } from "@shared/schema";
+import { normalize, hits } from "./utils/patternMatching";
 
 // Feature 1: WASM sandbox — re-exported for use by the FSM and routes.
 // runGateWasm runs the gate logic inside a hermetic QuickJS WASM VM with
@@ -14,24 +15,8 @@ export type GateResult = {
   pressure: string;
   escalation: string | null;
   reason: string;
-  signals: Record<string, any> | null;
+  signals: Record<string, unknown> | null;
 };
-
-function normalize(input: string): string {
-  return (input ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function hits(lower: string, patterns: (string | RegExp)[]): string[] {
-  const matched: string[] = [];
-  for (const p of patterns) {
-    if (typeof p === "string") {
-      if (lower.includes(p)) matched.push(p);
-    } else {
-      if (p.test(lower)) matched.push(String(p));
-    }
-  }
-  return matched;
-}
 
 const FINANCIAL_PATTERNS: (string | RegExp)[] = [
   "transactie", "overboeking", "betaling", "rekening", "credit", "debet",
