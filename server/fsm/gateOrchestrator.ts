@@ -40,13 +40,15 @@ export async function orchestrateGate(
   return new Promise<GateResult>((resolve) => {
     const actor = createActor(gateMachine);
 
-    actor.subscribe((snapshot) => {
+    const subscription = actor.subscribe((snapshot) => {
       if (snapshot.status === "done") {
         // Cerberus: missing result is treated as BLOCK, not as an exception
+        subscription.unsubscribe();
         resolve(snapshot.context.result ?? orchestratorBlockResult());
         actor.stop();
       } else if (snapshot.status === "error") {
         // Cerberus: machine error state is treated as BLOCK, not rethrown
+        subscription.unsubscribe();
         resolve(orchestratorBlockResult());
         actor.stop();
       }
