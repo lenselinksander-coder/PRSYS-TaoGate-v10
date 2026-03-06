@@ -78,9 +78,12 @@ def tao_gate_decide(
 
     # 1c. Barbatos — Delta_ext must stay within the safety envelope.
     #     The maximum permissible |Delta_ext| is sqrt(V_max / alpha).
-    delta_max = math.sqrt(params.V_max / params.alpha)
-    if abs(state.Delta_ext) > delta_max:
-        return Mode.BLOCK
+    #     When alpha == 0, Delta_ext has no weight in V(x), so the bound
+    #     is infinite (any value is permissible).
+    if params.alpha > 0:
+        delta_max = math.sqrt(params.V_max / params.alpha)
+        if abs(state.Delta_ext) > delta_max:
+            return Mode.BLOCK
 
     # 1d. O36 — human carrying capacity: omega <= tau - sigma_ext.
     if state.omega > omega_capacity(state):
@@ -135,7 +138,7 @@ def explain_decision(
         state, legitimacy_ok, gdpr_result=gdpr_result, params=params
     )
     v = instability(state, params)
-    delta_max = math.sqrt(params.V_max / params.alpha)
+    delta_max = math.sqrt(params.V_max / params.alpha) if params.alpha > 0 else math.inf
     omega_cap = omega_capacity(state)
 
     constraints: dict[str, bool] = {

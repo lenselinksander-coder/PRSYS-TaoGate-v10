@@ -89,8 +89,24 @@ def gdpr_personal_data_check(intent_context: dict[str, Any]) -> DecisionResult:
     DecisionResult
         ``decision=STOP`` when GDPR/WGBO requires blocking;
         ``decision=PASS`` otherwise.
+
+    Notes
+    -----
+    Any unexpected exception raised by :class:`PrivacyGate` is treated
+    as a STOP (fail-safe): when the privacy gate cannot be evaluated,
+    execution must not proceed.
     """
-    raw: dict[str, Any] = PrivacyGate().evaluate(intent_context)
+    try:
+        raw: dict[str, Any] = PrivacyGate().evaluate(intent_context)
+    except Exception as exc:  # noqa: BLE001
+        return DecisionResult(
+            decision=GdprDecision.STOP,
+            escalate=True,
+            reason=f"PrivacyGate evaluation failed unexpectedly: {exc}",
+            scope="GDPR_PERSONAL_DATA",
+            canon_level="CRITICAL",
+        )
+
     status = raw.get("status", "PASS")
 
     if status != "PASS":
