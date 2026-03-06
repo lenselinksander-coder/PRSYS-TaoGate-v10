@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from unittest.mock import patch
 
 from tao_gate.gdpr_bridge import DecisionResult, GdprDecision
+from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
 from tao_gate.supervisor import explain_decision, tao_gate_decide
 

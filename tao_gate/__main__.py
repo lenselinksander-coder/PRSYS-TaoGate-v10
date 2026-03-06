@@ -12,6 +12,9 @@ Covers:
   - Scenario E : BLOCK  — omega exceeds carrying capacity.
   - Scenario F : BLOCK  — GDPR returns STOP (overrides legitimacy=True).
   - Scenario G : BLOCK  — GDPR STOP even when state is otherwise healthy.
+  - Scenario H : HOLD   — INUIT Siku=0 tightens PASS to HOLD.
+  - Scenario I : PASS   — INUIT Siku=1 (sufficient capacity); PASS allowed.
+  - Scenario J : BLOCK  — INUIT Siku=0 does NOT relax BLOCK to HOLD.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import json
 import sys
 
 from tao_gate.gdpr_bridge import DecisionResult, GdprDecision, gdpr_personal_data_check
+from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.state import GateParams, Mode, State
 from tao_gate.supervisor import explain_decision, tao_gate_decide
 
@@ -59,9 +63,11 @@ def _run(
     legitimacy_ok: bool,
     gdpr_result: DecisionResult,
     expected: Mode,
+    inuit_signal: InuitSignal | None = None,
 ) -> None:
     result = explain_decision(
-        state, legitimacy_ok, gdpr_result=gdpr_result, params=PARAMS
+        state, legitimacy_ok, gdpr_result=gdpr_result,
+        inuit_signal=inuit_signal, params=PARAMS
     )
     mode = Mode(result["mode"])
     status = "✓" if mode == expected else "✗"
@@ -149,6 +155,36 @@ def main() -> None:
         legitimacy_ok=True,
         gdpr_result=live_gdpr,
         expected=Mode.BLOCK,
+    )
+
+    # H — HOLD: INUIT Siku=0 tightens PASS to HOLD (relational capacity insufficient)
+    _run(
+        "Scenario H · HOLD (INUIT Siku=0 tightens healthy PASS to HOLD)",
+        State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9),
+        legitimacy_ok=True,
+        gdpr_result=_GDPR_PASS,
+        expected=Mode.HOLD,
+        inuit_signal=inuit_context_check({"relational_capacity_ok": False}),
+    )
+
+    # I — PASS: INUIT Siku=1 (sufficient capacity); normal PASS allowed
+    _run(
+        "Scenario I · PASS (INUIT Siku=1: sufficient capacity, normal logic)",
+        State(Delta_ext=1.0, sigma_ext=0.5, omega=0.5, tau=2.0, TI=0.9),
+        legitimacy_ok=True,
+        gdpr_result=_GDPR_PASS,
+        expected=Mode.PASS,
+        inuit_signal=inuit_context_check({"siku": 1}),
+    )
+
+    # J — BLOCK: INUIT Siku=0 does NOT relax a hard-constraint BLOCK to HOLD
+    _run(
+        "Scenario J · BLOCK (INUIT Siku=0 does not relax TI-BLOCK to HOLD)",
+        State(Delta_ext=0.5, sigma_ext=0.1, omega=0.2, tau=1.0, TI=0.3),
+        legitimacy_ok=True,
+        gdpr_result=_GDPR_PASS,
+        expected=Mode.BLOCK,
+        inuit_signal=inuit_context_check({"biology_signal_ok": False}),
     )
 
     print("\n" + "=" * 65)

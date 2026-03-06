@@ -6,12 +6,14 @@ ORFHEUSS operates as a Hybrid Dynamical System (HDS) with three discrete modes
 mode to enter based on a continuous state vector x and external legitimacy/GDPR
 checks. The safety invariant V(x) <= V_max bounds instability. If GDPR signals
 STOP, TaoGate unconditionally emits BLOCK, ensuring no override is possible.
+INUIT · BIOLOGY is a pre-reflexive context sensor: Siku = 0 prevents PASS.
 All logic is pure Python (stdlib only), deterministic and side-effect free.
 """
 
 from tao_gate.state import Mode, State
 from tao_gate.supervisor import tao_gate_decide
 from tao_gate.gdpr_bridge import GdprDecision, gdpr_personal_data_check
+from tao_gate.inuit import InuitSignal, inuit_context_check
 
 __all__ = [
     "Mode",
@@ -19,4 +21,6 @@ __all__ = [
     "tao_gate_decide",
     "GdprDecision",
     "gdpr_personal_data_check",
+    "InuitSignal",
+    "inuit_context_check",
 ]

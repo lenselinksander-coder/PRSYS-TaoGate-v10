@@ -13,6 +13,8 @@ Decision logic (in priority order):
        - TI < TI_min                                   (SI/TI temporal stability)
   2. HOLD  — if V(x) >= V_hold_ratio * V_max (approaching the safety boundary).
   3. PASS  — all constraints satisfied and V(x) well below V_max.
+  4. INUIT post-filter — if Siku = 0, any PASS result is tightened to HOLD.
+     (Supervisory logic may only tighten decisions, never relax them.)
 
 All functions are pure (no I/O, no global state mutations).
 """
@@ -24,6 +26,7 @@ from typing import Any
 
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
 from tao_gate.gdpr_bridge import DecisionResult, GdprDecision
+from tao_gate.inuit import InuitSignal
 
 
 # Default parameter set used when no explicit GateParams are supplied.
@@ -35,6 +38,7 @@ def tao_gate_decide(
     legitimacy_ok: bool,
     *,
     gdpr_result: DecisionResult | None = None,
+    inuit_signal: InuitSignal | None = None,
     params: GateParams = _DEFAULT_PARAMS,
 ) -> Mode:
     """
@@ -51,6 +55,12 @@ def tao_gate_decide(
         Result of the GDPR_PERSONAL_DATA check.  If ``None`` the GDPR
         constraint is treated as satisfied (PASS).  A result with
         ``decision == GdprDecision.STOP`` forces Mode.BLOCK unconditionally.
+    inuit_signal : InuitSignal | None
+        Output of the INUIT · BIOLOGY pre-reflexive context sensor.
+        If ``None`` the INUIT constraint is treated as clear (Siku = 1).
+        When ``siku == 0``, any Mode.PASS result is tightened to Mode.HOLD,
+        because insufficient relational/cultural carrying capacity prevents
+        unconditional PASS — but does not necessarily force a full BLOCK.
     params : GateParams
         Tunable coefficients (alpha, beta, gamma, V_max, TI_min …).
         Defaults to :data:`_DEFAULT_PARAMS`.
@@ -64,7 +74,8 @@ def tao_gate_decide(
     -----
     The function is *monotone-safe*: if it returns BLOCK for a state, it
     will also return BLOCK for any state with higher instability or fewer
-    satisfied constraints.
+    satisfied constraints.  The INUIT post-filter can only tighten the
+    outcome (PASS → HOLD); it never relaxes HOLD or BLOCK.
     """
     # ── 1. Hard constraint checks (any failure → BLOCK) ─────────────────────
 
@@ -101,7 +112,15 @@ def tao_gate_decide(
     if v >= v_hold_threshold:
         return Mode.HOLD
 
-    # ── 3. All clear ─────────────────────────────────────────────────────────
+    # ── 3. INUIT post-filter (Siku = 0 → tighten PASS to HOLD) ─────────────
+    #     Applied only when the base decision would be PASS.  A Siku = 0 signal
+    #     means there is insufficient relational/cultural carrying capacity;
+    #     the system must not enter PASS.  HOLD and BLOCK are unaffected.
+
+    if inuit_signal is not None and inuit_signal.siku == 0:
+        return Mode.HOLD
+
+    # ── 4. All clear ─────────────────────────────────────────────────────────
 
     return Mode.PASS
 
@@ -111,6 +130,7 @@ def explain_decision(
     legitimacy_ok: bool,
     *,
     gdpr_result: DecisionResult | None = None,
+    inuit_signal: InuitSignal | None = None,
     params: GateParams = _DEFAULT_PARAMS,
 ) -> dict[str, Any]:
     """
@@ -126,16 +146,20 @@ def explain_decision(
         Cerberus legitimacy signal.
     gdpr_result : DecisionResult | None
         GDPR gate result (optional).
+    inuit_signal : InuitSignal | None
+        INUIT · BIOLOGY context sensor result (optional).
+        When ``siku == 0``, any PASS result is tightened to HOLD.
     params : GateParams
         Tunable coefficients.
 
     Returns
     -------
     dict[str, Any]
-        Keys: ``mode``, ``V``, ``V_max``, ``constraints``.
+        Keys: ``mode``, ``V``, ``V_max``, ``constraints``, ``inuit``.
     """
     mode = tao_gate_decide(
-        state, legitimacy_ok, gdpr_result=gdpr_result, params=params
+        state, legitimacy_ok, gdpr_result=gdpr_result,
+        inuit_signal=inuit_signal, params=params
     )
     v = instability(state, params)
     delta_max = math.sqrt(params.V_max / params.alpha) if params.alpha > 0 else math.inf
@@ -149,10 +173,17 @@ def explain_decision(
         "ti_sufficient": state.TI >= params.TI_min,
     }
 
+    inuit_info: dict[str, Any] = {
+        "siku": inuit_signal.siku if inuit_signal is not None else 1,
+        "reason": inuit_signal.reason if inuit_signal is not None else "INUIT not evaluated.",
+        "source": inuit_signal.source if inuit_signal is not None else "none",
+    }
+
     return {
         "mode": mode.value,
         "V": round(v, 6),
         "V_max": params.V_max,
         "V_hold_threshold": round(params.V_hold_ratio * params.V_max, 6),
         "constraints": constraints,
+        "inuit": inuit_info,
     }
