@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Eye, ShieldAlert, Menu, X, Building2, Plug, FileInput, ScrollText, LayoutDashboard, Monitor, Map } from "lucide-react";
+import { Eye, ShieldAlert, Menu, X, Building2, Plug, FileInput, ScrollText, LayoutDashboard, Monitor, Activity, Zap, Layers, Map, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MatrixRain } from "@/components/MatrixRain";
+import { useGlobalShortcuts, CommandPalette, ShortcutHelp, GoModeIndicator } from "@/components/CommandPalette";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [systemInfo, setSystemInfo] = useState<any>(null);
+  const { paletteOpen, setPaletteOpen, helpOpen, setHelpOpen, goMode } = useGlobalShortcuts();
 
   useEffect(() => {
     fetch("/api/system/info").then(r => r.json()).then(setSystemInfo).catch(() => {});
@@ -18,18 +20,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: "Dashboard", path: "/admin", icon: LayoutDashboard },
     { name: "Organisaties", path: "/admin/organizations", icon: Building2 },
     { name: "ARGOS", path: "/admin/triage", icon: Eye },
+    { name: "Scopes", path: "/admin/scopes", icon: Layers },
     { name: "Castra", path: "/admin/castra", icon: Map },
     { name: "Import", path: "/admin/import", icon: FileInput },
     { name: "Connectors", path: "/admin/connectors", icon: Plug },
+    { name: "OLYMPIA", path: "/admin/olympia", icon: Activity },
     { name: "Gateway Logs", path: "/admin/gateway-logs", icon: ScrollText },
+    { name: "Ingest", path: "/admin/ingest", icon: Zap },
   ];
 
   return (
     <div className="min-h-screen bg-background text-foreground font-mono selection:bg-primary/20">
-      {/* Matrix rain — fixed background layer */}
       <MatrixRain opacity={0.05} />
 
-      {/* Header */}
       <header
         className="fixed top-0 left-0 right-0 z-50 border-b border-primary/30 bg-background/90 backdrop-blur-md h-16 flex items-center px-4 md:px-6 justify-between"
         style={{ boxShadow: "0 1px 0 rgba(0,255,65,0.20), 0 4px 24px rgba(0,0,0,0.8)" }}
@@ -77,6 +80,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            data-testid="button-command-palette"
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 border border-primary/20 bg-black/60 hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer"
+            style={{ boxShadow: "0 0 6px rgba(0,255,65,0.08)" }}
+          >
+            <span className="text-xs font-mono text-muted-foreground">Zoek</span>
+            <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary/60 border border-primary/20">⌘K</kbd>
+          </button>
+          <button
+            onClick={() => setHelpOpen(true)}
+            data-testid="button-shortcut-help"
+            className="hidden md:flex items-center justify-center w-8 h-8 border border-primary/20 bg-black/60 hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer"
+            title="Sneltoetsen (?)"
+          >
+            <Keyboard className="w-3.5 h-3.5 text-primary/50" />
+          </button>
           <div
             className="hidden md:flex items-center gap-2 px-3 py-1.5 border border-primary/20 bg-black/60"
             style={{ boxShadow: "0 0 6px rgba(0,255,65,0.12)" }}
@@ -134,6 +154,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <main className="relative z-10 pt-24 pb-12 px-4 md:px-6 max-w-7xl mx-auto">
         {children}
       </main>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      <ShortcutHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <GoModeIndicator active={goMode} />
     </div>
   );
 }

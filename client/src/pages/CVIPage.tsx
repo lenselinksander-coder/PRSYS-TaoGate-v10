@@ -14,6 +14,7 @@ type ScopeLite = {
   name: string;
   description?: string | null;
   status?: string | null;
+  orgName?: string | null;
 };
 
 type ClassifyResponse = {
@@ -25,6 +26,7 @@ type ClassifyResponse = {
   reason: string | null;
   winningRule: any | null;
   signals: any | null;
+  onderbouwing?: string | null;
 };
 
 function badgeTone(decision: GateDecision) {
@@ -186,7 +188,7 @@ export default function CVIPage() {
             Alleen observaties. Opdrachten/imperatieven worden geblokt of geëscaleerd volgens de actieve band.
           </div>
 
-          {scopes.length > 1 && (
+          {scopes.filter(s => s.status === "LOCKED").length > 1 && (
             <div style={{ marginTop: 12 }}>
               <select
                 data-testid="select-scope"
@@ -206,8 +208,8 @@ export default function CVIPage() {
                 }}
                 disabled={loadingScope}
               >
-                {scopes.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} {s.status ? `(${s.status})` : ""}</option>
+                {scopes.filter(s => s.status === "LOCKED").map(s => (
+                  <option key={s.id} value={s.id}>{s.orgName ? `${s.orgName} — ` : ""}{s.name}</option>
                 ))}
               </select>
             </div>
@@ -356,6 +358,77 @@ export default function CVIPage() {
                       <div data-testid="text-reason" style={{ fontSize: 13, color: tone.fg, opacity: 0.9, lineHeight: 1.5 }}>
                         {result.reason}
                       </div>
+                    </div>
+                  )}
+
+                  {result.onderbouwing && (
+                    <div
+                      data-testid="onderbouwing-block"
+                      style={{
+                        marginTop: 10,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: "1px solid rgba(96,165,250,0.2)",
+                        background: "rgba(96,165,250,0.05)",
+                      }}
+                    >
+                      <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                        Onderbouwing (Perplexity)
+                      </div>
+                      <div style={{ fontSize: 13, color: "#c4dff6", lineHeight: 1.5 }}>
+                        {result.onderbouwing}
+                      </div>
+                    </div>
+                  )}
+
+                  {(result.status === "BLOCK" || result.status === "ESCALATE_HUMAN" || result.status === "ESCALATE_REGULATORY") && result.winningRule && (result.winningRule.article || result.winningRule.sourceUrl) && (
+                    <div
+                      data-testid="evidence-block"
+                      style={{
+                        marginTop: 10,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,200,80,0.2)",
+                        background: "rgba(255,200,80,0.04)",
+                      }}
+                    >
+                      <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+                        Juridische Grondslag
+                      </div>
+                      {result.winningRule.source && (
+                        <div style={{ fontSize: 12, color: "#d4a63a", fontWeight: 600, marginBottom: 2 }}>
+                          {result.winningRule.source}
+                        </div>
+                      )}
+                      {result.winningRule.article && (
+                        <div style={{ fontSize: 13, color: "#e9f3f8", marginBottom: 4 }}>
+                          {result.winningRule.article}
+                        </div>
+                      )}
+                      {result.winningRule.citation && (
+                        <div style={{ fontSize: 12, color: "rgba(180,240,255,0.6)", fontStyle: "italic", marginBottom: 6, lineHeight: 1.5 }}>
+                          "{result.winningRule.citation}"
+                        </div>
+                      )}
+                      {result.winningRule.sourceUrl && (
+                        <a
+                          href={result.winningRule.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 11,
+                            color: "#60a5fa",
+                            textDecoration: "none",
+                            borderBottom: "1px solid rgba(96,165,250,0.3)",
+                            paddingBottom: 1,
+                          }}
+                        >
+                          ↗ Bekijk bron
+                        </a>
+                      )}
                     </div>
                   )}
 

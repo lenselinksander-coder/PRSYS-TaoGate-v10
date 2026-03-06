@@ -56,6 +56,86 @@ const EDUCATIONAL_PATTERNS: (string | RegExp)[] = [
   "plagiarism", "assessment", "curriculum", "enrollment",
 ];
 
+const POLITICAL_MANIPULATION_PATTERNS: (string | RegExp)[] = [
+  /stem.*(advies|gedrag|voorkeur|beïnvloed)/,
+  /verkiezing.*(campagne|fraude|ondermijn|beïnvloed)/,
+  /kiezers?.*(segmentat|targeting|manipul|profiler)/,
+  /politiek.*(overtuiging|invloed|manipul|sturen)/,
+  /\b(polariseren|polarisatie|desinformatie|nepnieuws|fake\s*news)\b/,
+  /\blaat\b.*\bstemmen\s+op\b/,
+  /manipul\w*.*\b(kiezers|stemm|verkiezing|publieke\s+opinie)\b/,
+  /\b(kiezers|stemm|verkiezing|publieke\s+opinie)\b.*manipul/,
+  /beïnvloed.*\b(stemgedrag|verkiezing|electoraat|kiezers)\b/,
+  /\b(stemgedrag|verkiezing|electoraat|kiezers)\b.*beïnvloed/,
+  /twijfel.*(zaaien|verkiezingsuitslag)/,
+  /target.*(advertentie|campagne).*(politiek|kiezers|zwakke)/,
+  /\bai\b.*(kiezers|verkiezing).*manipul/,
+  /electorale?\s*profiler/,
+];
+
+const POLITICAL_OBSERVATION_GUARD: RegExp[] = [
+  /^(de|het|een)\b.*\b(uitslag|resultaat|telling|opkomst|percentage|opinie|peiling)\b.*\b(is|was|werd|zijn|waren|staat|toont|laat\s+zien)\b/,
+  /\b(verkiezingsuitslag|opkomstcijfer|stempercentage|opkomstpercentage|exitpoll)\b.*\b(is|was|bekend|gepubliceerd|vastgesteld|bekendgemaakt)\b/,
+  /\b(verkiezing|stemming|referendum)\b.*\b(plaatsgevonden|gehouden|afgelopen|voorbij|geweest)\b/,
+  /\b(analyse|onderzoek|rapport|studie|beschrijving|evaluatie|overzicht)\b.*\b(verkiezing|stem|kiezer|politiek|stemgedrag)\b/,
+  /\b(verkiezing|stem|kiezer|politiek|stemgedrag)\b.*\b(analyse|onderzoek|rapport|studie|statistiek|trend|beschrijving)\b/,
+];
+
+function canonPoliticalCheck(lower: string): GateResult | null {
+  for (const guard of POLITICAL_OBSERVATION_GUARD) {
+    if (guard.test(lower)) return null;
+  }
+  const matched = hits(lower, POLITICAL_MANIPULATION_PATTERNS);
+  if (matched.length === 0) return null;
+  return {
+    status: "BLOCK",
+    layer: "CANON_A1",
+    band: "POLITICAL_MANIPULATION",
+    pressure: "INFINITE",
+    escalation: "AI_OFFICE_TOEZICHTHOUDER",
+    reason: "Constitutionele weigering: politieke manipulatie gedetecteerd (Canon A1 — EU AI Act Art. 5(1)(a)).",
+    signals: { matched, canon: "A1", source: "EU AI Act Art. 5(1)(a)" },
+  };
+}
+
+const GDPR_PERSONAL_DATA_PATTERNS: (string | RegExp)[] = [
+  "naam", "adres", /telefoon\w*/, "e-mail", "email", "mailinglijst",
+  "burgerservicenummer", "bsn", "geboortedatum",
+  /medisch\w*\s*(gegeven|dossier)/, "diagnose",
+  /locatie\s*gegeven/, /gps[\s-]*gegeven/,
+  "identiteitsbewijs", "paspoort", "id-kaart", "rijbewijs",
+  "gezichtsherkenning", /biometrisch\w*\s*gegeven/,
+  /persoons\s*gegeven/, /persoonlijk\w*\s*gegeven/,
+  "ip-adres", "cookie", "vingerafdruk",
+  /e[\s-]*mail\s*adres/,
+];
+
+const GDPR_PROCESSING_VERBS: string[] = [
+  "verzamel", "verzamelen", "opslaan", "bewaar", "bewaren",
+  "maak een lijst", "lijst maken", "database",
+  "exporteer", "exporteren", "delen", "uitwisselen",
+  "verkopen", "verkoop", "profileren", "profileer",
+  "koppel", "combineren", "aan elkaar koppelen",
+  "scrapen", "harvesten", "downloaden", "kopieer", "kopiëren",
+  "doorsturen", "versturen", "uploaden",
+];
+
+function canonGdprCheck(lower: string): GateResult | null {
+  const dataHits = hits(lower, GDPR_PERSONAL_DATA_PATTERNS);
+  if (dataHits.length === 0) return null;
+  const verbHits = hits(lower, GDPR_PROCESSING_VERBS);
+  if (verbHits.length === 0) return null;
+  return {
+    status: "BLOCK",
+    layer: "CANON_A2",
+    band: "PERSONAL_DATA_PROCESSING",
+    pressure: "INFINITE",
+    escalation: "DATA_PROTECTION_OFFICER",
+    reason: "AVG/GDPR: (vermoedelijke) onrechtmatige verwerking van persoonsgegevens (Canon A2).",
+    signals: { dataPatterns: dataHits, processingVerbs: verbHits, canon: "A2", source: "AVG/GDPR" },
+  };
+}
+
 function generalGate(input: string): GateResult {
   const lower = normalize(input);
   if (!lower) {
@@ -214,6 +294,14 @@ function educationalGate(input: string): GateResult {
 }
 
 export function runGate(input: string, profile: GateProfile): GateResult {
+  const lower = normalize(input);
+
+  const canonBlock = canonPoliticalCheck(lower);
+  if (canonBlock) return canonBlock;
+
+  const gdprBlock = canonGdprCheck(lower);
+  if (gdprBlock) return gdprBlock;
+
   switch (profile) {
     case "CLINICAL": {
       const result = clinicalGate(input);

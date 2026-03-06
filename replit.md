@@ -2,33 +2,15 @@
 
 ## Overview
 
-**ORFHEUSS** is a universal governance model — a console that any organization can use to classify, escalate, and block intents based on configurable rules and datasets. Inside runs **PRSYS** (Paontologisch Resonantie Systeem), an ontological model for organizational movement built on **Paontologie**: the intersection of Merleau-Ponty (the body as knowledge) and Tao (the way, the flow).
+ORFHEUSS is a universal governance model designed to classify, escalate, and block intents based on configurable rules and datasets for any organization. It incorporates PRSYS (Paontologisch Resonantie Systeem), an ontological model for organizational movement. The system allows organizations to register with specific sector and gate profiles (e.g., Clinical, Financial, Legal), load custom Scopes (datasets of categories, rules, and documents), and integrate external AI agents. A core feature is the Universal Gateway, which applies gate and scope resolutions to all incoming intents, with all decisions recorded in an Intent Audit Trail.
 
-### Core Concept: Universal Governance
-- Organizations register with a **sector** and **gate profile** (Clinical, Financial, Legal, Educational, General, Custom)
-- Each organization loads **Scopes** — datasets containing classification categories, keywords, rules, and documents
-- External AI agents connect via **Connectors** with API keys
-- The **Universal Gateway** (`/api/gateway/classify`) applies gate + scope + OLYMPIA resolution to every intent
-- All decisions are logged in the **Intent Audit Trail**
+Key capabilities include:
+- **ARGOS (TaoGate)**: Pre-governance classification with customizable gate profiles.
+- **SCOPES**: Management of organizational datasets for classification.
+- **OLYMPIA**: A rule execution layer for jurisdictional conflict resolution across multiple layers (EU, National, Regional, Municipal).
+- **PRSYS Tape Pipeline**: Compiles scopes into signed, verifiable JavaScript tapes for secure and efficient runtime execution.
 
-### Modules
-- **ARGOS (TaoGate)** — Pre-governance classification with pluggable gate profiles. Each organization's gate profile determines which patterns are blocked/escalated before scope classification.
-- **SCOPES** — Organizational scope management. Each scope defines classification categories (with PASS/BLOCK status, escalation targets, keywords) and organizational documents.
-- **OLYMPIA (Rule Execution Layer)** — Jurisdictional rule conflict resolution. 4 layers (EU → NATIONAL → REGIONAL → MUNICIPAL) with priority mechanics. BLOCK always wins. Higher jurisdiction wins on conflict.
-- **Organizations** — Multi-tenant organization management. Each org gets its own scopes, connectors, and gate profile.
-- **Connectors** — External AI agent/data source/webhook registry with API key generation.
-- **Dataset Import** — CSV/JSON import pipeline that creates Scopes automatically.
-- **Gateway Logs** — Audit trail of all intents processed through the universal gateway.
-
-### Gate Profiles
-- **CLINICAL** — Blocks medication orders, procedures, triage, imperatives. Only observations allowed.
-- **GENERAL** — Blocks destructive imperatives, passes observations.
-- **FINANCIAL** — Blocks fraud/money laundering indicators, escalates KYC/AML.
-- **LEGAL** — Blocks criminal context, escalates legally sensitive intents.
-- **EDUCATIONAL** — Escalates assessments/testing, transparency for educational observations.
-- **CUSTOM** — Default general filtering, extensible per organization.
-
-The UI language is predominantly **Dutch**, reflecting the target user base.
+The project aims to provide a robust and adaptable governance framework, ensuring compliance and controlled AI interactions across diverse organizational contexts.
 
 ## User Preferences
 
@@ -36,112 +18,63 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
+ORFHEUSS is built as a multi-tenant application with a clear separation of concerns between its frontend, backend, and core governance pipeline.
+
 ### Frontend
-- **Framework**: React 18 with TypeScript
-- **Routing**: React Router DOM v7
-- **State Management**: Local React state for UI, fetch for API calls
-- **Styling**: Tailwind CSS v4 with CSS variables for theming, using a dark clinical/technical theme (cyan accent on dark blue-grey)
-- **UI Components**: shadcn/ui (new-york style) with Radix UI primitives
-- **Icons**: Lucide React
-- **Build Tool**: Vite with path aliases (`@/` → `client/src/`, `@shared/` → `shared/`)
+- **Framework**: React 18 with TypeScript.
+- **Routing**: React Router DOM v7.
+- **State Management**: Local React state, with `fetch` for API interactions.
+- **Styling**: Tailwind CSS v4 using CSS variables, featuring a dark clinical/technical theme (cyan on dark blue-grey).
+- **UI Components**: shadcn/ui (new-york style) built on Radix UI primitives.
+- **Icons**: Lucide React.
+- **Build Tool**: Vite, with path aliases for improved development experience.
+- The UI language is predominantly **Dutch**.
 
 ### Backend
-- **Runtime**: Node.js with Express 5
-- **Language**: TypeScript, executed via `tsx`
-- **API Pattern**: RESTful JSON API under `/api/` prefix
-- **Gate System**: Pluggable gate profiles (`server/gateSystem.ts`) wrapping domain-specific gates (clinical, financial, legal, educational, general)
-- **Build**: esbuild for server bundling, Vite for client bundling
+- **Runtime**: Node.js with Express 5.
+- **Language**: TypeScript, executed via `tsx`.
+- **API Pattern**: RESTful JSON API under the `/api/` prefix.
+- **Gate System**: A pluggable gate system (`server/gateSystem.ts`) allowing for different domain-specific profiles (clinical, financial, legal, educational, general).
+- **Build**: esbuild for server bundling.
 
-### API Endpoints
+### Core Pipeline (server/pipeline/)
+The business logic is modularized into a pipeline service, which processes intents through a series of steps:
+- **Argos**: Input detection and normalization.
+- **Arachne**: Syntax and intent-structure analysis.
+- **Logos**: Domain and keyword classification using scope data.
+- **Olympia**: Jurisdictional rule resolution and Cerberus gate enforcement.
+- **Castra**: Risk assessment (Hypatia for Impact x Probability, Phronesis for SI).
+- **TaoGate**: Final decision lattice resolution and notifications.
+- **Audit**: Creation of audit records.
+- Specialized modules for clinical evaluation (e.g., `clinical.ts` for Implicit Pressure LLM evaluation).
 
-#### Core
-- `POST /api/classify` — Classify intent with scope (uses org's gate profile)
-- `POST /api/olympia/resolve` — Resolve rule conflicts across jurisdictional layers
-- `GET /api/system/info` — System overview (orgs, scopes, connectors, intent stats)
+### PRSYS Tape Pipeline
+This pipeline ensures that runtime execution is secure and immutable. Scopes, once locked, are compiled into signed JavaScript tapes.
+- **Workflow**: Scopes are built into versioned `.js` tapes, cryptographically signed (SHA-256 + Ed25519), and then loaded into a TapeDeck for execution.
+- **PRSYS_INVARIANT**: The `/api/gate` endpoint exclusively executes from these verified tapes, never directly querying the database for classification logic.
+- **Canon Layer Schema**: Tapes are categorized into canonical layers (e.g., `PRSYS_CORE_COMPLIANCE_LAYER` for EU regulation, `PRSYS_DOMAIN_LAW_LAYER` for national law) with defined precedence rules. Higher precedence layers or BLOCK decisions from any layer cannot be overridden by lower layers.
 
-#### Organizations
-- `GET /api/organizations` — List all organizations
-- `GET /api/organizations/:id` — Get organization
-- `POST /api/organizations` — Create organization (name, slug, sector, gateProfile)
-- `PUT /api/organizations/:id` — Update organization
-- `DELETE /api/organizations/:id` — Delete organization
-
-#### Scopes
-- `GET /api/scopes` — List all scopes (optional `?orgId=`)
-- `GET /api/scopes/default` — Get default scope
-- `GET /api/scopes/:id` — Get scope
-- `POST /api/scopes` — Create scope
-- `PUT /api/scopes/:id` — Update scope
-- `DELETE /api/scopes/:id` — Delete scope
-- `POST /api/scopes/:id/preflight` — Preflight check before lock
-- `POST /api/scopes/:id/lock` — Lock scope
-
-#### Connectors
-- `GET /api/connectors` — List connectors (optional `?orgId=`)
-- `GET /api/connectors/:id` — Get connector
-- `POST /api/connectors` — Register connector (generates API key)
-- `PUT /api/connectors/:id` — Update connector
-- `DELETE /api/connectors/:id` — Delete connector
-
-#### Universal Gateway
-- `POST /api/gateway/classify` — Submit intent via API key auth (x-api-key header)
-
-#### Intent Audit
-- `GET /api/intents` — List intents (optional `?orgId=&limit=`)
-- `GET /api/intents/stats` — Intent statistics
-
-#### Dataset Import
-- `POST /api/import/json` — Import JSON dataset as scope
-- `POST /api/import/csv` — Import CSV dataset as scope
-
-#### Observations
-- `POST /api/observations` — Create observation
-- `GET /api/observations` — List observations
-- `GET /api/observations/stats` — Stats
-
-#### Research (Perplexity)
-- `POST /api/ingest/research` — Research topic via Perplexity
-- `POST /api/ingest/extract` — Extract scope from research
-- `POST /api/ingest/draft` — Create draft scope from research
-- `POST /api/ingest/manual-draft` — Create manual draft scope
-
-### Data Storage
-- **Database**: PostgreSQL
-- **ORM**: Drizzle ORM with `drizzle-zod`
-- **Tables**:
-  - `organizations`: id, name, slug, description, sector, gate_profile, created_at
-  - `scopes`: id, name, description, status, org_id, categories (JSONB), documents (JSONB), rules (JSONB), ingest_meta (JSONB), is_default, created_at, updated_at
-  - `observations`: id, text, status, category, escalation, context, scope_id, olympia_rule_id, olympia_action, olympia_layer, created_at
-  - `connectors`: id, org_id, name, type, provider, description, api_key, status, config (JSONB), last_used_at, created_at
-  - `intents`: id, org_id, scope_id, connector_id, input_text, decision, category, layer, pressure, reason, escalation, processing_ms, created_at
-
-### Pages
-- `/` — Dashboard (system overview, stats, quick links)
-- `/organizations` — Organization management
-- `/triage` — ARGOS TaoGate (intent classification with scope selector)
-- `/scopes` — Scope management
-- `/import` — Dataset import (JSON/CSV)
-- `/connectors` — Connector/agent registry
-- `/gateway-logs` — Intent audit trail
-- `/olympia` — OLYMPIA Rule Execution Layer
-- `/ingest` — AI-powered research & scope extraction
-- `/lexicon` — Lexicon
+### TRST/TGR Runtime Physics
+This module defines runtime physics for decision processing, influencing system behavior and stability but not the decision's semantic outcome.
+- **τ (Draagkracht / Torque)**: Represents the structural complexity of a decision.
+- **ω (Besluit-velocity)**: Represents the system-level load.
+- **TI (Transfer Integrity)**: A pre-gate condition for assessing data integrity before execution.
+- **SI (Spanningsindex)**: Calculated as τ × ω, used for system load indication with thresholds for throttling and hard blocking.
+- **State Machine**: Intents pass through a state machine (e.g., INIT, PRE_GATE, EXECUTE, BLOCK) during processing.
+- **Invariants**: τ, ω, TI, SI are runtime metadata and do not influence the `decision_hash` (A6 intact). They serve as runtime controls.
 
 ### Key Design Decisions
-1. **Universal model** — Not tied to any specific sector. Gate profiles make it adaptable.
-2. **Pluggable gate system** — Clinical gate is one profile among many. Organizations choose their profile.
-3. **API-first gateway** — External agents authenticate via API keys and get full governance pipeline.
-4. **Multi-tenant via organizations** — Each org gets isolated scopes and connectors.
-5. **Dataset import** — CSV and JSON import creates draft Scopes automatically.
-6. **Audit trail** — Every gateway intent is logged with decision, timing, and context.
+- **Universal and Pluggable Gate System**: Adaptable across sectors via configurable gate profiles.
+- **API-first Gateway**: Facilitates external AI agent integration through API key authentication.
+- **Multi-tenant Architecture**: Isolates scopes and connectors per organization.
+- **Automated Dataset Import**: Simplifies scope creation from JSON/CSV.
+- **Comprehensive Audit Trail**: Logs all gateway intents for transparency and accountability.
+- **Secure Tape Pipeline**: Ensures integrity and immutability of classification logic at runtime.
 
 ## External Dependencies
 
-### Required Services
-- **PostgreSQL Database** — Required for all persistent data storage.
-
-### Key NPM Packages
-- `express` v5, `drizzle-orm`, `pg`, `zod`, `drizzle-zod`
-- `react`, `react-router-dom`, `lucide-react`
-- `tailwindcss`, `shadcn/ui` components
-- `openai` (Perplexity integration)
+- **Database**: PostgreSQL (for all persistent data storage).
+- **ORM**: Drizzle ORM with `drizzle-zod`.
+- **Frontend Libraries**: `react`, `react-router-dom`, `lucide-react`, `tailwindcss`, `shadcn/ui`.
+- **Backend Libraries**: `express`, `pg`, `zod`.
+- **AI Integration**: `openai` (used for Perplexity integration).

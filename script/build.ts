@@ -52,7 +52,12 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: "dist/index.cjs",
+    banner: {
+      js: `const{pathToFileURL}=require("url");const{join}=require("path");if(typeof globalThis.import_meta_url==="undefined"){globalThis.import_meta_url=pathToFileURL(__filename).href}`,
+    },
     define: {
+      "import.meta.url": "globalThis.import_meta_url",
+      "import.meta.dirname": "__dirname",
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,

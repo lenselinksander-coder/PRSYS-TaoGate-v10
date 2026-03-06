@@ -1,209 +1,74 @@
-import { runGate } from "./gateSystem";
-import { orchestrateGate } from "./fsm/gateOrchestrator";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { insertObservationSchema, insertScopeSchema, ruleLayers, insertOrganizationSchema, gateProfiles } from "@shared/schema";
-import type { Scope, GateDecision, ScopeRule, RuleLayer, GateProfile } from "@shared/schema";
 import { z } from "zod";
-import { researchTopic, extractScopeFromResearch, preflightCheck } from "./perplexity";
-import { maxDecision, compareDecision, getLattice } from "./prsys/canon/decisionLattice";
-import { runTrace } from "./trace/traceRunner";in
-
-// ── Cerberus: absolute boundary enforcement via the formal decision lattice ───
-// Decision hierarchy (ascending restrictiveness):
-//   PASS < PASS_WITH_TRANSPARENCY < ESCALATE_HUMAN < ESCALATE_REGULATORY < BLOCK
-//
-// The gate decision is the absolute lower bound. A scope or runtime decision
-// can tighten a passing gate result, but can never loosen it. This ensures
-// Cerberus cannot be overridden by any downstream or runtime decision.
-// Implemented using maxDecision() from the formal PRSYS decision lattice.
-
-/**
- * Return the more restrictive of two gate decisions.
- * Delegates to the formal decision lattice: D_final = maxDecision(D_gate, D_scope).
- * If scopeDecision is absent, the gate decision is returned unchanged.
- */
-function cerberusEnforce(gateDecision: GateDecision, scopeDecision?: GateDecision | null): GateDecision {
-  return maxDecision(gateDecision, scopeDecision);
-}
-
-function classifyWithScope(text: string, scope: Scope): { status: GateDecision; category: string; escalation: string | null; reason: string | null } {
-  const lower = text.toLowerCase();
-  const priorityOrder: GateDecision[] = ["BLOCK", "ESCALATE_REGULATORY", "ESCALATE_HUMAN", "PASS_WITH_TRANSPARENCY", "PASS"];
-
-  const reasonMap: Record<string, string> = {
-    BLOCK: "Classificatie geblokt — menselijke beoordeling vereist.",
-    ESCALATE_REGULATORY: "Regulatoire escalatie vereist — toezichthouder raadplegen.",
-    ESCALATE_HUMAN: "Escalatie naar mens vereist — beoordeling door specialist.",
-    PASS_WITH_TRANSPARENCY: "Doorgelaten met transparantieverplichting.",
-  };
-
-  for (const decision of priorityOrder) {
-    const cats = scope.categories.filter(c => c.status === decision);
-    for (const cat of cats) {
-      if (cat.keywords.some(kw => lower.includes(kw.toLowerCase()))) {
-        let reason: string | null = null;
-        if (decision !== "PASS") {
-          reason = cat.escalation
-            ? `${cat.label ?? cat.name} — escaleer naar ${cat.escalation}.`
-            : reasonMap[decision] ?? null;
-        }
-        return { status: cat.status, category: cat.name, escalation: cat.escalation, reason };
-      }
-    }
-  }
-
-  const defaultPass = scope.categories.find(c => c.status === "PASS");
-  return {
-    status: "PASS",
-    category: defaultPass?.name || "Observation",
-    escalation: null,
-    reason: null,
-  };
-}
-
-function resolveOlympiaRules(scope: Scope, domain?: string, category?: string) {
-  const rules = (scope.rules || []) as ScopeRule[];
-  let applicable = rules;
-  if (domain) {
-    applicable = applicable.filter(r => r.domain === domain);
-  }
-  if (category) {
-    applicable = applicable.filter(r =>
-      r.ruleId.toLowerCase().includes(category.toLowerCase()) ||
-      r.title.toLowerCase().includes(category.toLowerCase()) ||
-      r.domain.toLowerCase().includes(category.toLowerCase())
-    );
-  }
-
-  const priorityIndex = (layer: RuleLayer) => ruleLayers.indexOf(layer);
-  const actionSeverity = (action: string) => {
-    const order: Record<string, number> = { BLOCK: 5, ESCALATE_REGULATORY: 4, ESCALATE_HUMAN: 3, PASS_WITH_TRANSPARENCY: 2, PASS: 1 };
-    return order[action] || 0;
-  };
-  const sorted = [...applicable].sort((a, b) => priorityIndex(a.layer) - priorityIndex(b.layer) || actionSeverity(b.action) - actionSeverity(a.action));
-
-  let winningRule: ScopeRule | null = null;
-  for (const layer of ruleLayers) {
-    const layerRules = sorted.filter(r => r.layer === layer);
-    if (layerRules.length === 0) continue;
-
-    const layerBlock = layerRules.find(r => r.action === "BLOCK");
-    if (layerBlock) {
-      winningRule = layerBlock;
-      break;
-    }
-
-    const overriding = layerRules.filter(r => r.overridesLowerLayers);
-    if (overriding.length > 0) {
-      winningRule = overriding[0];
-      break;
-    }
-
-    if (!winningRule) {
-      winningRule = layerRules[0];
-    }
-  }
-
-  if (!winningRule && sorted.length > 0) {
-    winningRule = sorted[0];
-  }
-
-  const layerSummary = ruleLayers.map(layer => {
-    const layerRules = sorted.filter(r => r.layer === layer);
-    return {
-      layer,
-      priority: priorityIndex(layer) + 1,
-      ruleCount: layerRules.length,
-      rules: layerRules,
-      dominantAction: layerRules[0]?.action || null,
-    };
-  });
-
-  const hasConflict = new Set(sorted.map(r => r.action)).size > 1;
-
-  const pressure = sorted.reduce((acc, r) => {
-    if (r.action === "BLOCK") return Infinity;
-    const layerWeight = 4 - priorityIndex(r.layer);
-    const actionWeight = actionSeverity(r.action);
-    return acc + layerWeight * actionWeight;
-  }, 0);
-
-  return {
-    winningRule,
-    hasConflict,
-    pressure: pressure === Infinity ? "INFINITE" as const : pressure,
-    layers: layerSummary,
-    applicableRules: sorted,
-    totalRules: rules.length,
-  };
-}
+import { storage } from "./storage";
+import { insertObservationSchema, insertScopeSchema, insertOrganizationSchema, gateProfiles } from "@shared/schema";
+import { getTapeDeck } from "./core/init";
+import { executeTaoGate } from "./core/trst";
+import { researchTopic, extractScopeFromResearch } from "./perplexity";
+import { repairPdfJson, extractJsonObject, structurePdfText } from "./services/pdfParser";
+import {
+  runPipeline,
+  classifyIntent,
+  gatewayClassify,
+  resolveOlympiaRules,
+  preflightCheck,
+} from "./pipeline";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  // ── Classify (original, with pluggable gate) ─────────────
-  app.post("/api/classify", async (req, res) => {
+  app.post("/api/gate", async (req, res) => {
     try {
-      const { text, scopeId } = req.body as { text?: string; scopeId?: string };
+      const { text, scopeId, tapeId } = req.body as { text?: string; scopeId?: string; tapeId?: string };
+      if (!text) return res.status(400).json({ error: "text required" });
+      if (!scopeId && !tapeId) return res.status(400).json({ error: "scopeId or tapeId required" });
 
-      if (!text || !scopeId) {
-        return res.status(400).json({ error: "text and scopeId required" });
+      const tapeDeck = getTapeDeck();
+      if (!tapeDeck || tapeDeck.tapes.size === 0) {
+        return res.status(503).json({ error: "tape_deck_empty", message: "No verified tapes loaded. Build and sign tapes first." });
       }
 
-      const scope = await storage.getScope(scopeId);
-      if (!scope) return res.status(404).json({ error: "Scope not found" });
-
-      let gateProfile: GateProfile = "GENERAL";
-      if (scope.orgId) {
-        const org = await storage.getOrganization(scope.orgId);
-        if (org) gateProfile = org.gateProfile as GateProfile;
-      } else {
-        gateProfile = "CLINICAL";
-      }
-
-      const gate = runGate(text, gateProfile);
-
-      if (gate.status === "BLOCK" || gate.status === "ESCALATE_HUMAN" || gate.status === "ESCALATE_REGULATORY") {
-        return res.json({
-          status: gate.status,
-          olympia: gate.band,
-          layer: gate.layer,
-          pressure: gate.pressure,
-          escalation: gate.escalation,
-          reason: gate.reason,
-          winningRule: null,
-          signals: gate.signals,
+      const tape = tapeId ? tapeDeck.tapes.get(tapeId) : scopeId ? tapeDeck.byScopeId.get(scopeId) : undefined;
+      if (!tape) {
+        return res.status(404).json({
+          error: "tape_not_found",
+          message: `No verified tape found for ${tapeId ? `tapeId=${tapeId}` : `scopeId=${scopeId}`}`,
+          available: Array.from(tapeDeck.tapes.keys()),
         });
       }
 
-      const classification = classifyWithScope(text, scope);
+      const decision = executeTaoGate(text, tape, tapeDeck);
 
-      const rules = (scope.rules || []) as ScopeRule[];
-      const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
-      const matchedDomain = availableDomains.find(d => classification.category.toUpperCase().includes(d.toUpperCase()));
+      if (decision.hard_block) {
+        return res.json({
+          status: "HARD_BLOCK", category: "TRST_VIOLATION", escalation: null, rule_id: null,
+          layer: "TRST", reason: decision.hard_block_reason, tape_id: decision.dc.tape_id,
+          processingMs: decision.processing_ms, lexiconSource: "internal", lexiconDeterministic: "true",
+          trst: { decision_context: decision.dc, canon: decision.canon, physics: decision.physics, axioms_satisfied: decision.axioms_satisfied, axioms_violated: decision.axioms_violated },
+        });
+      }
 
-      const olympia = resolveOlympiaRules(scope, matchedDomain);
-      // Cerberus: gate decision is the absolute lower bound — scope cannot downgrade it
-      const finalStatus = cerberusEnforce(gate.status, classification.status);
       return res.json({
-        status: finalStatus,
-        olympia: olympia.winningRule?.ruleId ?? null,
-        layer: olympia.winningRule?.layer ?? "EU",
-        pressure: olympia.pressure === "INFINITE" ? "CRITICAL" : "NORMAL",
-        escalation: classification.escalation ?? null,
-        reason: classification.reason ?? (finalStatus !== "PASS" ? (olympia.winningRule?.description ?? null) : null),
-        winningRule: olympia.winningRule ?? null,
-        signals: null,
+        ...decision.result, processingMs: decision.processing_ms, lexiconSource: "internal", lexiconDeterministic: "true",
+        trst: { decision_context: decision.dc, canon: decision.canon, physics: decision.physics, axioms_satisfied: decision.axioms_satisfied, axioms_violated: [] },
       });
     } catch (err: any) {
-      return res.status(500).json({
-        error: "internal_error",
-        message: err?.message ?? String(err),
-      });
+      return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
+    }
+  });
+
+  app.post("/api/classify", async (req, res) => {
+    try {
+      const { text, scopeId } = req.body as { text?: string; scopeId?: string };
+      if (!text || !scopeId) return res.status(400).json({ error: "text and scopeId required" });
+      const result = await classifyIntent(text, scopeId);
+      if (result.error) return res.status(404).json(result);
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
     }
   });
 
@@ -215,23 +80,16 @@ export async function registerRoutes(
 
   app.post("/api/olympia/resolve", async (req, res) => {
     const parsed = resolveInputSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const { scopeId, domain, category } = parsed.data;
-
     const scope = await storage.getScope(scopeId);
     if (!scope) return res.status(404).json({ error: "Scope not found" });
-
     return res.json(resolveOlympiaRules(scope, domain, category));
   });
 
-  // ── Observations ─────────────────────────────────────────
   app.post("/api/observations", async (req, res) => {
     const parsed = insertObservationSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const observation = await storage.createObservation(parsed.data);
     return res.status(201).json(observation);
   });
@@ -239,26 +97,21 @@ export async function registerRoutes(
   app.get("/api/observations", async (req, res) => {
     const context = req.query.context as string | undefined;
     const scopeId = req.query.scopeId as string | undefined;
-    const observations = await storage.getObservations(context, scopeId);
-    return res.json(observations);
+    return res.json(await storage.getObservations(context, scopeId));
   });
 
   app.get("/api/observations/stats", async (req, res) => {
     const context = req.query.context as string | undefined;
     const scopeId = req.query.scopeId as string | undefined;
-    const stats = await storage.getStats(context, scopeId);
-    return res.json(stats);
+    return res.json(await storage.getStats(context, scopeId));
   });
 
-  // ── Scopes ───────────────────────────────────────────────
   app.get("/api/scopes", async (req, res) => {
     const orgId = req.query.orgId as string | undefined;
-    if (orgId) {
-      const scopeList = await storage.getScopesByOrg(orgId);
-      return res.json(scopeList);
-    }
-    const scopeList = await storage.getScopes();
-    return res.json(scopeList);
+    const scopeList = orgId ? await storage.getScopesByOrg(orgId) : await storage.getScopes();
+    const orgs = await storage.getOrganizations();
+    const orgMap = new Map(orgs.map(o => [o.id, o.name]));
+    return res.json(scopeList.map(s => ({ ...s, orgName: s.orgId ? orgMap.get(s.orgId) ?? null : null })));
   });
 
   app.get("/api/scopes/default", async (_req, res) => {
@@ -275,18 +128,13 @@ export async function registerRoutes(
 
   app.post("/api/scopes", async (req, res) => {
     const parsed = insertScopeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-    const scope = await storage.createScope(parsed.data);
-    return res.status(201).json(scope);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    return res.status(201).json(await storage.createScope(parsed.data));
   });
 
   app.put("/api/scopes/:id", async (req, res) => {
     const parsed = insertScopeSchema.partial().safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const scope = await storage.updateScope(req.params.id, parsed.data);
     if (!scope) return res.status(404).json({ error: "Scope not found" });
     return res.json(scope);
@@ -298,10 +146,8 @@ export async function registerRoutes(
     return res.json({ success: true });
   });
 
-  // ── Organizations ────────────────────────────────────────
   app.get("/api/organizations", async (_req, res) => {
-    const orgs = await storage.getOrganizations();
-    return res.json(orgs);
+    return res.json(await storage.getOrganizations());
   });
 
   app.get("/api/organizations/:id", async (req, res) => {
@@ -320,22 +166,15 @@ export async function registerRoutes(
 
   app.post("/api/organizations", async (req, res) => {
     const parsed = createOrgSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const existing = await storage.getOrganizationBySlug(parsed.data.slug);
-    if (existing) {
-      return res.status(409).json({ error: "Organisatie met deze slug bestaat al" });
-    }
-    const org = await storage.createOrganization(parsed.data);
-    return res.status(201).json(org);
+    if (existing) return res.status(409).json({ error: "Organisatie met deze slug bestaat al" });
+    return res.status(201).json(await storage.createOrganization(parsed.data));
   });
 
   app.put("/api/organizations/:id", async (req, res) => {
     const parsed = createOrgSchema.partial().safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const org = await storage.updateOrganization(req.params.id, parsed.data);
     if (!org) return res.status(404).json({ error: "Organization not found" });
     return res.json(org);
@@ -347,24 +186,43 @@ export async function registerRoutes(
     return res.json({ success: true });
   });
 
-  // ── Connectors ───────────────────────────────────────────
+  app.post("/api/organizations/:id/mount", async (req, res) => {
+    const { scopeId } = req.body as { scopeId?: string };
+    if (!scopeId) return res.status(400).json({ error: "scopeId required" });
+    const org = await storage.getOrganization(req.params.id);
+    if (!org) return res.status(404).json({ error: "Organization not found" });
+    const scope = await storage.getScope(scopeId);
+    if (!scope) return res.status(404).json({ error: "Scope not found" });
+    if (scope.status !== "LOCKED") return res.status(422).json({ error: "Alleen LOCKED scopes kunnen worden gemount" });
+    const updated = await storage.updateOrganization(req.params.id, { activeScopeId: scopeId } as any);
+    return res.json({ success: true, org: updated, mountedScope: scope.name });
+  });
+
+  app.delete("/api/organizations/:id/mount", async (req, res) => {
+    const org = await storage.getOrganization(req.params.id);
+    if (!org) return res.status(404).json({ error: "Organization not found" });
+    const updated = await storage.updateOrganization(req.params.id, { activeScopeId: null } as any);
+    return res.json({ success: true, org: updated });
+  });
+
+  app.get("/api/organizations/:id/active-scope", async (req, res) => {
+    const org = await storage.getOrganization(req.params.id) as any;
+    if (!org) return res.status(404).json({ error: "Organization not found" });
+    if (!org.activeScopeId) return res.json({ scope: null });
+    const scope = await storage.getScope(org.activeScopeId);
+    return res.json({ scope: scope || null });
+  });
+
   app.get("/api/connectors", async (req, res) => {
     const orgId = req.query.orgId as string | undefined;
     const list = await storage.getConnectors(orgId);
-    const safe = list.map(c => ({
-      ...c,
-      apiKey: c.apiKey.substring(0, 12) + "..." + c.apiKey.substring(c.apiKey.length - 4),
-    }));
-    return res.json(safe);
+    return res.json(list.map(c => ({ ...c, apiKey: c.apiKey.substring(0, 12) + "..." + c.apiKey.substring(c.apiKey.length - 4) })));
   });
 
   app.get("/api/connectors/:id", async (req, res) => {
     const connector = await storage.getConnector(req.params.id);
     if (!connector) return res.status(404).json({ error: "Connector not found" });
-    return res.json({
-      ...connector,
-      apiKey: connector.apiKey.substring(0, 12) + "..." + connector.apiKey.substring(connector.apiKey.length - 4),
-    });
+    return res.json({ ...connector, apiKey: connector.apiKey.substring(0, 12) + "..." + connector.apiKey.substring(connector.apiKey.length - 4) });
   });
 
   const createConnectorSchema = z.object({
@@ -379,18 +237,13 @@ export async function registerRoutes(
 
   app.post("/api/connectors", async (req, res) => {
     const parsed = createConnectorSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-    const connector = await storage.createConnector(parsed.data);
-    return res.status(201).json(connector);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    return res.status(201).json(await storage.createConnector(parsed.data));
   });
 
   app.put("/api/connectors/:id", async (req, res) => {
     const parsed = createConnectorSchema.partial().safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const connector = await storage.updateConnector(req.params.id, parsed.data);
     if (!connector) return res.status(404).json({ error: "Connector not found" });
     return res.json(connector);
@@ -402,189 +255,157 @@ export async function registerRoutes(
     return res.json({ success: true });
   });
 
-  // ── Universal Gateway ────────────────────────────────────
-  const gatewaySchema = z.object({
-    text: z.string().min(1),
-    scopeId: z.string().optional(),
-  });
+  const gatewaySchema = z.object({ text: z.string().min(1), scopeId: z.string().optional() });
 
   app.post("/api/gateway/classify", async (req, res) => {
-    const start = Date.now();
     try {
       const apiKey = req.headers["x-api-key"] as string;
-      if (!apiKey) {
-        return res.status(401).json({ error: "API key vereist (x-api-key header)" });
-      }
-
+      if (!apiKey) return res.status(401).json({ error: "API key vereist (x-api-key header)" });
       const connector = await storage.getConnectorByApiKey(apiKey);
-      if (!connector) {
-        return res.status(403).json({ error: "Ongeldige of gedeactiveerde API key" });
-      }
-
+      if (!connector) return res.status(403).json({ error: "Ongeldige of gedeactiveerde API key" });
       const parsed = gatewaySchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.flatten() });
-      }
-
-      const org = await storage.getOrganization(connector.orgId);
-      if (!org) {
-        return res.status(404).json({ error: "Organisatie niet gevonden" });
-      }
-
-      const gateProfile = (org.gateProfile as GateProfile) || "GENERAL";
-      // Run gate evaluation inside the XState FSM (Feature 3: TypeScript FSM).
-      // The FSM validates all state transitions at compile-time and treats any
-      // evaluation error as BLOCK (fail-safe). Feature 1 (WASM sandbox) wires
-      // into the machine's evaluateGate actor via gateSystem.ts.
-      const gate = await orchestrateGate(parsed.data.text, gateProfile);
-
-      let scopeResult = null;
-      let olympiaResult = null;
-
-      if (gate.status === "PASS" || gate.status === "PASS_WITH_TRANSPARENCY") {
-        let scope: Scope | undefined;
-        if (parsed.data.scopeId) {
-          scope = await storage.getScope(parsed.data.scopeId);
-        } else {
-          const orgScopes = await storage.getScopesByOrg(org.id);
-          scope = orgScopes.find(s => s.status === "LOCKED") || orgScopes[0];
-        }
-
-        if (scope) {
-          scopeResult = classifyWithScope(parsed.data.text, scope);
-          const rules = (scope.rules || []) as ScopeRule[];
-          const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
-          const matchedDomain = availableDomains.find(d => scopeResult!.category.toUpperCase().includes(d.toUpperCase()));
-          olympiaResult = resolveOlympiaRules(scope, matchedDomain);
-        }
-      }
-
-      // Cerberus: gate decision is the absolute lower bound — scope cannot downgrade it
-      const finalDecision = cerberusEnforce(gate.status, scopeResult?.status);
-      const processingMs = Date.now() - start;
-
-      await storage.touchConnector(connector.id);
-      await storage.createIntent({
-        orgId: org.id,
-        scopeId: parsed.data.scopeId || null,
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const result = await gatewayClassify({
+        text: parsed.data.text,
+        orgId: connector.orgId,
         connectorId: connector.id,
-        inputText: parsed.data.text,
-        decision: finalDecision,
-        category: scopeResult?.category || gate.band,
-        layer: olympiaResult?.winningRule?.layer || gate.layer,
-        pressure: String(olympiaResult?.pressure ?? gate.pressure),
-        reason: scopeResult?.reason || gate.reason,
-        escalation: scopeResult?.escalation || gate.escalation,
-        processingMs,
+        scopeId: parsed.data.scopeId,
       });
-
-      return res.json({
-        decision: finalDecision,
-        gate: {
-          status: gate.status,
-          layer: gate.layer,
-          band: gate.band,
-          pressure: gate.pressure,
-          reason: gate.reason,
-        },
-        scope: scopeResult ? {
-          status: scopeResult.status,
-          category: scopeResult.category,
-          escalation: scopeResult.escalation,
-          reason: scopeResult.reason,
-        } : null,
-        olympia: olympiaResult?.winningRule ? {
-          ruleId: olympiaResult.winningRule.ruleId,
-          layer: olympiaResult.winningRule.layer,
-          action: olympiaResult.winningRule.action,
-          title: olympiaResult.winningRule.title,
-          source: olympiaResult.winningRule.source,
-        } : null,
-        processingMs,
-        organization: org.name,
-        gateProfile,
-      });
+      return res.json(result);
     } catch (err: any) {
       return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
     }
   });
 
-  // ── Intent Audit Logs ────────────────────────────────────
   app.get("/api/intents", async (req, res) => {
     const orgId = req.query.orgId as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    const list = await storage.getIntents(orgId, limit);
-    return res.json(list);
+    return res.json(await storage.getIntents(orgId, limit));
   });
 
   app.get("/api/intents/stats", async (req, res) => {
     const orgId = req.query.orgId as string | undefined;
-    const stats = await storage.getIntentStats(orgId);
-    return res.json(stats);
+    return res.json(await storage.getIntentStats(orgId));
   });
 
-  // ── Dataset Import (CSV/JSON → Scope) ────────────────────
+  app.post("/api/import/parse-pdf", async (req, res) => {
+    const schema = z.object({
+      pdfBase64: z.string().min(1, "PDF data is verplicht"),
+      fileName: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    try {
+      const { PDFParse } = await import("pdf-parse") as any;
+      const buffer = Buffer.from(parsed.data.pdfBase64, "base64");
+      const parser = new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
+      await parser.load();
+      const textResult = await parser.getText();
+      const fullText = typeof textResult === "string" ? textResult : (textResult?.text || "");
+      const numPages = textResult?.total || parser.doc?.numPages || 1;
+      await parser.destroy();
+
+      const extracted: { categories?: any[]; rules?: any[]; documents?: any[] } = {};
+
+      const rawCleaned = fullText
+        .replace(/[\u200B\u200C\u200D\uFEFF]/g, "")
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/\n*--\s*\d+\s+of\s+\d+\s*--\n*/g, "\n");
+
+      let jsonBlock = extractJsonObject(rawCleaned);
+      if (!jsonBlock) {
+        const firstBrace = rawCleaned.indexOf('{');
+        const lastBrace = rawCleaned.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          jsonBlock = rawCleaned.substring(firstBrace, lastBrace + 1);
+        }
+      }
+      if (jsonBlock) {
+        const parsed2 = repairPdfJson(jsonBlock);
+        if (parsed2 && typeof parsed2 === "object") {
+          if (Array.isArray(parsed2.categories)) extracted.categories = parsed2.categories;
+          if (Array.isArray(parsed2.rules)) extracted.rules = parsed2.rules;
+          if (Array.isArray(parsed2.documents)) extracted.documents = parsed2.documents;
+        }
+      }
+
+      const sections = structurePdfText(fullText, numPages);
+
+      if (!extracted.categories && !extracted.rules) {
+        const allContent = sections.map(s => s.content).join("\n");
+        const fullParsed = repairPdfJson(allContent);
+        if (fullParsed && typeof fullParsed === "object" && !Array.isArray(fullParsed)) {
+          if (Array.isArray(fullParsed.categories)) extracted.categories = fullParsed.categories;
+          if (Array.isArray(fullParsed.rules)) extracted.rules = fullParsed.rules;
+        }
+      }
+
+      if (!extracted.categories && !extracted.rules) {
+        for (const s of sections) {
+          const obj = repairPdfJson(s.content);
+          if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+            if (Array.isArray(obj.categories) && obj.categories.length > 0) extracted.categories = [...(extracted.categories || []), ...obj.categories];
+            if (Array.isArray(obj.rules) && obj.rules.length > 0) extracted.rules = [...(extracted.rules || []), ...obj.rules];
+          } else if (Array.isArray(obj) && obj.length > 0) {
+            if (obj[0].name && obj[0].keywords) extracted.categories = [...(extracted.categories || []), ...obj];
+            else if (obj[0].ruleId && obj[0].layer) extracted.rules = [...(extracted.rules || []), ...obj];
+          }
+        }
+      }
+
+      return res.json({
+        fileName: parsed.data.fileName || "document.pdf",
+        pages: numPages,
+        totalChars: fullText.length,
+        sections,
+        extracted: Object.keys(extracted).length > 0 ? extracted : undefined,
+      });
+    } catch (err: any) {
+      return res.status(400).json({ error: `PDF parsing mislukt: ${err.message}` });
+    }
+  });
+
   const importJsonSchema = z.object({
     orgId: z.string(),
     name: z.string().min(1),
     description: z.string().optional(),
     data: z.object({
       categories: z.array(z.object({
-        name: z.string(),
-        label: z.string(),
+        name: z.string(), label: z.string(),
         status: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
         escalation: z.string().nullable().optional().default(null),
         keywords: z.array(z.string()).optional().default([]),
       })).optional().default([]),
       rules: z.array(z.object({
-        ruleId: z.string(),
-        layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
-        domain: z.string(),
-        title: z.string(),
-        description: z.string(),
+        ruleId: z.string(), layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
+        domain: z.string(), title: z.string(), description: z.string(),
         action: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
         overridesLowerLayers: z.boolean().optional().default(false),
-        source: z.string().optional().default(""),
-        sourceUrl: z.string().optional().default(""),
-        article: z.string().optional().default(""),
-        citation: z.string().optional().default(""),
+        source: z.string().optional().default(""), sourceUrl: z.string().optional().default(""),
+        article: z.string().optional().default(""), citation: z.string().optional().default(""),
         qTriad: z.enum(["Mens×Mens", "Mens×Systeem", "Systeem×Systeem"]).optional(),
       })).optional().default([]),
       documents: z.array(z.object({
         type: z.enum(["visiedocument", "mandaat", "huisregel", "protocol", "overig"]),
-        title: z.string(),
-        content: z.string(),
+        title: z.string(), content: z.string(),
       })).optional().default([]),
     }),
   });
 
   app.post("/api/import/json", async (req, res) => {
     const parsed = importJsonSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const { orgId, name, description, data } = parsed.data;
       const org = await storage.getOrganization(orgId);
       if (!org) return res.status(404).json({ error: "Organisatie niet gevonden" });
-
       const scope = await storage.createScope({
-        name,
-        description: description || `Geïmporteerd dataset voor ${org.name}`,
-        status: "DRAFT",
-        orgId,
-        categories: data.categories,
-        rules: data.rules,
-        documents: data.documents,
-        ingestMeta: {
-          query: `Import: ${name}`,
-          citations: [],
-          researchedAt: new Date().toISOString(),
-          model: "import-json",
-          gaps: [],
-        },
+        name, description: description || `Geïmporteerd dataset voor ${org.name}`, status: "DRAFT", orgId,
+        categories: data.categories, rules: data.rules, documents: data.documents,
+        ingestMeta: { query: `Import: ${name}`, citations: [], researchedAt: new Date().toISOString(), model: "import-json", gaps: [] },
       });
-
       return res.status(201).json(scope);
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "Import mislukt" });
@@ -592,21 +413,14 @@ export async function registerRoutes(
   });
 
   const importCsvSchema = z.object({
-    orgId: z.string(),
-    name: z.string().min(1),
-    description: z.string().optional(),
+    orgId: z.string(), name: z.string().min(1), description: z.string().optional(),
     csvContent: z.string(),
-    mapping: z.object({
-      type: z.enum(["categories", "rules"]),
-      columns: z.record(z.string()),
-    }),
+    mapping: z.object({ type: z.enum(["categories", "rules"]), columns: z.record(z.string()) }),
   });
 
   app.post("/api/import/csv", async (req, res) => {
     const parsed = importCsvSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const { orgId, name, description, csvContent, mapping } = parsed.data;
       const org = await storage.getOrganization(orgId);
@@ -615,9 +429,23 @@ export async function registerRoutes(
       const lines = csvContent.split("\n").map(l => l.trim()).filter(l => l);
       if (lines.length < 2) return res.status(400).json({ error: "CSV moet minimaal een header en één rij bevatten" });
 
-      const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+      const parseCsvLine = (line: string): string[] => {
+        const fields: string[] = [];
+        let current = "";
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') { if (inQuotes && line[i + 1] === '"') { current += '"'; i++; } else inQuotes = !inQuotes; }
+          else if ((ch === "," || ch === ";") && !inQuotes) { fields.push(current.trim()); current = ""; }
+          else current += ch;
+        }
+        fields.push(current.trim());
+        return fields;
+      };
+
+      const headers = parseCsvLine(lines[0]);
       const rows = lines.slice(1).map(line => {
-        const values = line.split(",").map(v => v.trim().replace(/^"|"$/g, ""));
+        const values = parseCsvLine(line);
         const row: Record<string, string> = {};
         headers.forEach((h, i) => { row[h] = values[i] || ""; });
         return row;
@@ -655,163 +483,88 @@ export async function registerRoutes(
       }
 
       const scope = await storage.createScope({
-        name,
-        description: description || `CSV import voor ${org.name}`,
-        status: "DRAFT",
-        orgId,
-        categories,
-        rules,
-        documents: [],
-        ingestMeta: {
-          query: `CSV Import: ${name}`,
-          citations: [],
-          researchedAt: new Date().toISOString(),
-          model: "import-csv",
-          gaps: [],
-        },
+        name, description: description || `CSV import voor ${org.name}`, status: "DRAFT", orgId,
+        categories, rules, documents: [],
+        ingestMeta: { query: `CSV Import: ${name}`, citations: [], researchedAt: new Date().toISOString(), model: "import-csv", gaps: [] },
       });
-
       return res.status(201).json({ scope, imported: { categories: categories.length, rules: rules.length } });
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "CSV import mislukt" });
     }
   });
 
-  // ── Research (Perplexity) ────────────────────────────────
-  const researchSchema = z.object({
-    query: z.string().min(3, "Zoekvraag moet minimaal 3 tekens zijn"),
-  });
+  const researchSchema = z.object({ query: z.string().min(3, "Zoekvraag moet minimaal 3 tekens zijn") });
 
   app.post("/api/ingest/research", async (req, res) => {
     const parsed = researchSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const result = await researchTopic(parsed.data.query);
-      return res.json(result);
+      return res.json(await researchTopic(parsed.data.query));
     } catch (err: any) {
-      console.error("Perplexity research error:", err);
       return res.status(502).json({ error: err.message || "Perplexity API error" });
     }
   });
 
-  const extractSchema = z.object({
-    query: z.string(),
-    content: z.string(),
-    citations: z.array(z.string()),
-  });
+  const extractSchema = z.object({ query: z.string(), content: z.string(), citations: z.array(z.string()) });
 
   app.post("/api/ingest/extract", async (req, res) => {
     const parsed = extractSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const result = await extractScopeFromResearch(
-        parsed.data.query,
-        parsed.data.content,
-        parsed.data.citations
-      );
-      return res.json(result);
+      return res.json(await extractScopeFromResearch(parsed.data.query, parsed.data.content, parsed.data.citations));
     } catch (err: any) {
-      console.error("Perplexity extraction error:", err);
       return res.status(502).json({ error: err.message || "Extraction failed" });
     }
   });
 
   app.post("/api/ingest/draft", async (req, res) => {
     const parsed = extractSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const extraction = await extractScopeFromResearch(
-        parsed.data.query,
-        parsed.data.content,
-        parsed.data.citations
-      );
-
+      const extraction = await extractScopeFromResearch(parsed.data.query, parsed.data.content, parsed.data.citations);
       const scope = await storage.createScope({
-        name: extraction.name,
-        description: extraction.description,
-        status: "DRAFT",
-        categories: extraction.categories,
-        rules: extraction.rules,
-        documents: [],
-        ingestMeta: {
-          query: parsed.data.query,
-          citations: parsed.data.citations,
-          researchedAt: new Date().toISOString(),
-          model: "sonar",
-          gaps: extraction.gaps,
-        },
+        name: extraction.name, description: extraction.description, status: "DRAFT",
+        categories: extraction.categories, rules: extraction.rules, documents: [],
+        ingestMeta: { query: parsed.data.query, citations: parsed.data.citations, researchedAt: new Date().toISOString(), model: "sonar", gaps: extraction.gaps },
       });
-
       return res.status(201).json(scope);
     } catch (err: any) {
-      console.error("Draft creation error:", err);
       return res.status(502).json({ error: err.message || "Draft creation failed" });
     }
   });
 
   const manualDraftSchema = z.object({
-    name: z.string().min(1),
-    description: z.string().optional().default(""),
-    orgId: z.string().optional(),
+    name: z.string().min(1), description: z.string().optional().default(""), orgId: z.string().optional(),
     rules: z.array(z.object({
-      ruleId: z.string(),
-      layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
-      domain: z.string(),
-      title: z.string(),
-      description: z.string(),
+      ruleId: z.string(), layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
+      domain: z.string(), title: z.string(), description: z.string(),
       action: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
       overridesLowerLayers: z.boolean().optional().default(false),
-      source: z.string().optional().default(""),
-      sourceUrl: z.string().optional().default(""),
-      article: z.string().optional().default(""),
-      citation: z.string().optional().default(""),
+      source: z.string().optional().default(""), sourceUrl: z.string().optional().default(""),
+      article: z.string().optional().default(""), citation: z.string().optional().default(""),
       qTriad: z.enum(["Mens×Mens", "Mens×Systeem", "Systeem×Systeem"]).optional(),
     })).optional().default([]),
     categories: z.array(z.object({
-      name: z.string(),
-      label: z.string(),
+      name: z.string(), label: z.string(),
       status: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
       escalation: z.string().nullable().optional().default(null),
       keywords: z.array(z.string()).optional().default([]),
     })).optional().default([]),
-    sourceText: z.string().optional().default(""),
-    sourceUrls: z.array(z.string()).optional().default([]),
+    sourceText: z.string().optional().default(""), sourceUrls: z.array(z.string()).optional().default([]),
   });
 
   app.post("/api/ingest/manual-draft", async (req, res) => {
     const parsed = manualDraftSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const data = parsed.data;
       const scope = await storage.createScope({
-        name: data.name,
-        description: data.description,
-        status: "DRAFT",
-        orgId: data.orgId,
-        categories: data.categories,
-        rules: data.rules,
-        documents: [],
-        ingestMeta: {
-          query: `Handmatig: ${data.name}`,
-          citations: data.sourceUrls,
-          researchedAt: new Date().toISOString(),
-          model: "manual",
-          gaps: [],
-          sourceText: data.sourceText,
-        },
+        name: data.name, description: data.description, status: "DRAFT", orgId: data.orgId,
+        categories: data.categories, rules: data.rules, documents: [],
+        ingestMeta: { query: `Handmatig: ${data.name}`, citations: data.sourceUrls, researchedAt: new Date().toISOString(), model: "manual", gaps: [], sourceText: data.sourceText },
       });
-
       return res.status(201).json(scope);
     } catch (err: any) {
-      console.error("Manual draft creation error:", err);
       return res.status(500).json({ error: err.message || "Draft creation failed" });
     }
   });
@@ -819,45 +572,19 @@ export async function registerRoutes(
   app.post("/api/scopes/:id/preflight", async (req, res) => {
     const scope = await storage.getScope(req.params.id);
     if (!scope) return res.status(404).json({ error: "Scope not found" });
-
-    const result = preflightCheck({
-      rules: (scope.rules || []) as any,
-      categories: (scope.categories || []) as any,
-      gaps: (scope.ingestMeta as any)?.gaps,
-    });
-
-    return res.json(result);
+    return res.json(preflightCheck({ rules: (scope.rules || []) as any, categories: (scope.categories || []) as any }));
   });
 
   app.post("/api/scopes/:id/lock", async (req, res) => {
     const scope = await storage.getScope(req.params.id);
     if (!scope) return res.status(404).json({ error: "Scope not found" });
-
-    if (scope.status === "LOCKED") {
-      return res.status(400).json({ error: "Scope is al LOCKED" });
-    }
-
-    const preflight = preflightCheck({
-      rules: (scope.rules || []) as any,
-      categories: (scope.categories || []) as any,
-      gaps: (scope.ingestMeta as any)?.gaps,
-    });
-
-    if (!preflight.canLock) {
-      return res.status(422).json({
-        error: "Preflight gefaald — scope kan niet gelocked worden",
-        preflight,
-      });
-    }
-
+    if (scope.status === "LOCKED") return res.status(400).json({ error: "Scope is al LOCKED" });
+    const preflight = preflightCheck({ rules: (scope.rules || []) as any, categories: (scope.categories || []) as any });
+    if (!preflight.canLock) return res.status(422).json({ error: "Preflight gefaald — scope kan niet gelocked worden", preflight });
     const locked = await storage.updateScope(scope.id, { status: "LOCKED" });
     return res.json({ scope: locked, preflight });
   });
 
-  // ── ORFHEUSS Trace Pipeline ──────────────────────────────
-  // POST /api/trace — run the full 10-step ORFHEUSS pipeline and return
-  // a step-by-step trace with TaoGate Decision Lattice, Hypatia risk
-  // formula, and Phronesis capacity formula results.
   const traceSchema = z.object({
     input: z.string().min(0).max(4000),
     profile: z.enum(gateProfiles).optional(),
@@ -869,299 +596,126 @@ export async function registerRoutes(
 
   app.post("/api/trace", async (req, res) => {
     const parsed = traceSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const result = await runTrace(parsed.data);
-      return res.json(result);
+      return res.json(await runPipeline(parsed.data));
     } catch (err: any) {
-      // Fail-safe: any pipeline error → BLOCK (Lex Tabularium)
       return res.status(500).json({
-        error: "trace_error",
-        message: err?.message ?? String(err),
-        finalDecision: "BLOCK",
-        finalReason: "Pipeline fout — geblokkeerd als fail-safe (Lex Tabularium).",
+        error: "trace_error", message: err?.message ?? String(err),
+        finalDecision: "BLOCK", finalReason: "Pipeline fout — geblokkeerd als fail-safe (Lex Tabularium).",
       });
     }
   });
 
-  // ── System Info ──────────────────────────────────────────
   app.get("/api/system/info", async (_req, res) => {
-    const orgs = await storage.getOrganizations();
-    const allScopes = await storage.getScopes();
-    const allConnectors = await storage.getConnectors();
-    const intentStats = await storage.getIntentStats();
-
+    const [orgs, allScopes, allConnectors, intentStats] = await Promise.all([
+      storage.getOrganizations(), storage.getScopes(), storage.getConnectors(), storage.getIntentStats(),
+    ]);
     return res.json({
-      version: "2.0.0",
-      model: "ORFHEUSS Universal",
-      organizations: orgs.length,
-      scopes: allScopes.length,
-      connectors: allConnectors.length,
-      intents: intentStats,
+      version: "2.0.0", model: "ORFHEUSS Universal",
+      organizations: orgs.length, scopes: allScopes.length, connectors: allConnectors.length, intents: intentStats,
       gateProfiles: ["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"],
       sectors: ["healthcare", "finance", "education", "government", "technology", "legal", "energy", "transport", "retail", "manufacturing", "other"],
     });
   });
 
-  // ── Pipeline Trace ───────────────────────────────────────
-  // POST /api/trace
-  //
-  // Runs an input through the full PRSYS/TaoGate pipeline and returns a
-  // step-by-step trace showing each agent's contribution to the final decision.
-  //
-  // Pipeline agents:
-  //   INPUT → Argos → Arachne → Logos → Hypatia → Cerberus → TaoGate → Sandbox → Audit
-  //
-  // Body: { text: string, profile?: GateProfile, scopeId?: string }
+  app.post("/api/seed-demo", async (_req, res) => {
+    try {
+      const existingOrgs = await storage.getOrganizations();
+      const existingScopes = await storage.getScopes();
 
-  const traceSchema = z.object({
-    text: z.string().min(1).max(8000),
-    profile: z.enum(["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"]).optional().default("GENERAL"),
-    scopeId: z.string().optional(),
-  });
+      const orgDefs = [
+        { name: "Erasmus MC", slug: "erasmus-mc", description: "Academisch Ziekenhuis", sector: "healthcare", gateProfile: "CLINICAL" },
+        { name: "Kraaijenvanger", slug: "kraaijenvanger", description: "Architectenbureau", sector: "other", gateProfile: "CUSTOM" },
+      ];
 
-  app.post("/api/trace", async (req, res) => {
-    const start = Date.now();
-    const parsed = traceSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-
-    const { text, profile, scopeId } = parsed.data;
-
-    type StepStatus = "pass" | "flagged" | "blocked" | "escalated" | "logged";
-    type PipelineStep = {
-      agent: string;
-      role: string;
-      status: StepStatus;
-      durationMs: number;
-      result: Record<string, unknown>;
-    };
-
-    const steps: PipelineStep[] = [];
-
-    // ── Step 1: INPUT ──────────────────────────────────────────────────────────
-    const t0 = Date.now();
-    const inputStep: PipelineStep = {
-      agent: "INPUT",
-      role: "Porta — raw input received",
-      status: "pass",
-      durationMs: Date.now() - t0,
-      result: {
-        text,
-        length: text.length,
-        profile,
-      },
-    };
-    steps.push(inputStep);
-
-    // ── Step 2: Argos (observer) ───────────────────────────────────────────────
-    // Normalizes input and reports structural observations (length, casing, etc.)
-    const t1 = Date.now();
-    const normalised = text.toLowerCase().replace(/\s+/g, " ").trim();
-    const wordCount = normalised.split(" ").filter(Boolean).length;
-    const hasImperative = /\b(verwijder|delete|wis|stop|blokkeer|deactiveer|annuleer|override|forceer|immediately|onmiddellijk)\b/i.test(normalised);
-    const argosStep: PipelineStep = {
-      agent: "Argos",
-      role: "Observer — input normalization & structural analysis",
-      status: "pass",
-      durationMs: Date.now() - t1,
-      result: {
-        wordCount,
-        hasImperative,
-        normalised: normalised.slice(0, 200) + (normalised.length > 200 ? "…" : ""),
-      },
-    };
-    steps.push(argosStep);
-
-    // ── Step 3: Arachne (structurer) ───────────────────────────────────────────
-    // Detects which domain-pattern categories are present in the input.
-    // Patterns are bilingual (Dutch/English) to support the system's primary
-    // use-case in the Netherlands while remaining accessible to English users.
-    const t2 = Date.now();
-    const DOMAIN_PATTERNS: Record<string, string[]> = {
-      // Dutch: transactie, betaling, rekening, fraude, witwassen | English: transaction, payment, fraud
-      financial: ["transactie", "betaling", "rekening", "fraude", "witwassen", "kyc", "aml", "transaction", "payment", "fraud"],
-      // Dutch: vonnis, rechtszaak, advocaat, strafbaar, misdrijf | English: verdict, lawsuit
-      legal: ["vonnis", "rechtszaak", "advocaat", "strafbaar", "misdrijf", "contract", "verdict", "lawsuit"],
-      // Dutch: medicatie, diagnose, dosis, behandeling | English: medication, diagnosis, treatment
-      clinical: ["medicatie", "diagnose", "patient", "dosis", "behandeling", "medication", "diagnosis", "treatment"],
-      // Dutch: leerling, toets, examen, cijfer, diploma | English: assessment, plagiarism
-      educational: ["leerling", "student", "toets", "examen", "cijfer", "diploma", "assessment", "plagiarism"],
-    };
-    const detectedDomains: string[] = [];
-    for (const [domain, patterns] of Object.entries(DOMAIN_PATTERNS)) {
-      if (patterns.some(p => normalised.includes(p))) {
-        detectedDomains.push(domain);
+      const createdOrgs: Record<string, string> = {};
+      for (const def of orgDefs) {
+        const existing = existingOrgs.find(o => o.slug === def.slug);
+        if (existing) { createdOrgs[def.name] = existing.id; }
+        else { const org = await storage.createOrganization(def); createdOrgs[def.name] = org.id; }
       }
-    }
-    const arachneStep: PipelineStep = {
-      agent: "Arachne",
-      role: "Structurer — domain pattern detection & categorisation",
-      status: detectedDomains.length > 0 ? "flagged" : "pass",
-      durationMs: Date.now() - t2,
-      result: {
-        detectedDomains,
-        domainCount: detectedDomains.length,
-      },
-    };
-    steps.push(arachneStep);
 
-    // ── Step 4: Logos (reasoner) ───────────────────────────────────────────────
-    // Runs the synchronous gate logic to determine intent classification.
-    const t3 = Date.now();
-    const gateResult = runGate(text, profile as GateProfile);
-    const logosStep: PipelineStep = {
-      agent: "Logos",
-      role: "Reasoner — intent recognition & gate pattern matching",
-      status: gateResult.status === "PASS" ? "pass" : gateResult.status === "BLOCK" ? "blocked" : "flagged",
-      durationMs: Date.now() - t3,
-      result: {
-        layer: gateResult.layer,
-        band: gateResult.band,
-        pressure: gateResult.pressure,
-        signals: gateResult.signals,
-      },
-    };
-    steps.push(logosStep);
+      const scopeDefs = [
+        {
+          name: "LEYEN", description: "EU AI Act — Deterministische pre-governance classificatie voor AI-systemen.", orgName: null, isDefault: "true",
+          categories: [
+            { name: "POLITICAL_MANIPULATION", color: "", label: "Politieke Manipulatie (Verboden)", status: "BLOCK", keywords: ["kiezers manipuleren","stemgedrag beïnvloeden","politieke profilering","electorale manipulatie","kiezers targeting","politieke polarisatie","desinformatie campagne","nepnieuws verspreiden","verkiezingsfraude ai","stemadvies manipulatie","publieke opinie manipuleren","politieke microtargeting","voter suppression","election interference","political deepfake"], escalation: "AI Office / Toezichthouder" },
+            { name: "PERSONAL_DATA_PROCESSING", color: "", label: "Persoonsgegevens Verwerking (AVG/GDPR)", status: "BLOCK", keywords: ["naam verzamelen","e-mail opslaan","bsn database","medisch dossier exporteren","telefoonnummer lijst","adres verkopen","persoonsgegevens delen","biometrische gegevens bewaren","geboortedatum profileren","locatiegegevens scrapen"], escalation: "Data Protection Officer" },
+            { name: "EU_AI_PROHIBITED", color: "", label: "Verboden AI (Onaanvaardbaar Risico)", status: "BLOCK", keywords: ["social scoring","sociaal kredietsysteem","manipulatie","subliminal","kwetsbare groepen uitbuiting","biometrische massa-identificatie","real-time biometrie","gezichtsherkenning massa","emotieherkenning werkplek","emotieherkenning onderwijs","predictive policing","voorspellend politiewerk","gedragsmanipulatie","dark patterns ai","scoring overheidsdiensten"], escalation: "AI Office / Toezichthouder" },
+            { name: "EU_AI_HIGH_RISK", color: "", label: "Hoog Risico (Annex III)", status: "ESCALATE_HUMAN", keywords: ["biometrisch","kritieke infrastructuur","onderwijs toelating","werkgelegenheid selectie","kredietbeoordeling","rechtshandhaving","migratie","asiel","rechtspraak ai","medisch hulpmiddel","veiligheidssysteem","sollicitatie ai","cv screening ai","grenscontrole","autonome besluitvorming","geautomatiseerde beslissing","bijzondere persoonsgegevens","kwetsbare groepen","fundamentele rechten","critical infrastructure"], escalation: "DPO / Legal / Conformiteitsbeoordelaar" },
+            { name: "EU_AI_GPAI", color: "", label: "General Purpose AI", status: "ESCALATE_REGULATORY", keywords: ["foundation model","large language model","llm","gpt","general purpose","generatieve ai","chatbot breed inzetbaar","systemisch risico","training data","compute threshold","10^25 flops","gpai","basismodel"], escalation: "AI Office / DPO" },
+            { name: "EU_AI_LIMITED_RISK", color: "", label: "Beperkt Risico (Transparantie)", status: "PASS_WITH_TRANSPARENCY", keywords: ["chatbot","deepfake","ai-gegenereerde content","synthetische media","transparantieverplichting","ai-label","ai-disclosure","emotieherkenning beperkt","biometrische categorisatie","ai-interactie melding"], escalation: "Transparantieverplichting" },
+            { name: "EU_AI_MINIMAL", color: "", label: "Minimaal Risico", status: "PASS", keywords: ["spamfilter","ai gaming","aanbevelingssysteem","zoekalgoritme","autocorrect","vertaalsoftware","voorraadoptimalisatie","routeplanning","beeldverbetering","contentfilter"], escalation: null },
+            { name: "PRIVACY_DOSSIER", color: "", label: "Privacy / Dossier", status: "ESCALATE_HUMAN", keywords: ["dossier","medisch dossier","patiëntgegevens","ouders","avg","wgbo","beroepsgeheim","inzagerecht","deel_dossier"], escalation: "DPO" },
+          ],
+          documents: [
+            { type: "visiedocument", title: "EU AI Act — Scope Visie MC LEYEN", content: "MC LEYEN implementeert deterministische pre-governance classificatie voor AI-systemen conform de EU AI Act (Verordening (EU) 2024/1689).\n\nDe TaoGate observeert en classificeert. De mens autoriseert." },
+            { type: "mandaat", title: "Mandaat — Menselijk Toezicht", content: "Conform Artikel 14 EU AI Act is menselijk toezicht verplicht voor alle hoog-risico AI-systemen." },
+            { type: "protocol", title: "Protocol — Conformiteitsbeoordeling", content: "Verplichte checks voor hoog-risico AI-systemen: Risicomanagementsysteem, Data governance, Technische documentatie, Registratie in EU-databank, DPIA, Transparantie, Menselijk toezicht, Nauwkeurigheid." },
+            { type: "huisregel", title: "Huisregel — Mechanica Mapping", content: "ORFHEUSS Mechanica Layer: Regeldruk MINIMAAL -> PASS, LAAG -> PASS_WITH_TRANSPARENCY, HOOG -> ESCALATE_HUMAN, VARIABEL -> ESCALATE_REGULATORY, ONEINDIG -> BLOCK." },
+          ],
+          rules: [
+            { layer: "EU", title: "Verboden AI — Politieke Manipulatie", action: "BLOCK", domain: "AI", ruleId: "EU_AI_ART_5_POL", source: "EU AI Act", article: "Artikel 5(1)(a)", description: "AI-systemen die manipulatieve of misleidende technieken inzetten om stemgedrag of politieke overtuigingen te beïnvloeden zijn verboden.", overridesLowerLayers: true },
+            { layer: "EU", title: "AVG — Onrechtmatige verwerking persoonsgegevens", action: "BLOCK", domain: "PRIVACY", ruleId: "EU_AVG_ART_6", source: "AVG/GDPR", article: "Artikel 6/Artikel 9", description: "Verwerking van persoonsgegevens zonder rechtmatige grondslag is verboden. Bijzondere categorieën (medisch, biometrisch, BSN) vereisen expliciete toestemming of wettelijke grondslag.", overridesLowerLayers: true },
+            { layer: "EU", title: "Verboden AI-praktijken", action: "BLOCK", domain: "AI", ruleId: "EU_AI_ART_5", source: "EU AI Act", article: "Artikel 5", description: "AI-systemen voor sociale scoring, manipulatieve technieken, biometrische classificatie op gevoelige kenmerken, en voorspellende politie zijn verboden.", overridesLowerLayers: true },
+            { layer: "EU", title: "Hoog-risico AI-systemen", action: "ESCALATE_HUMAN", domain: "AI", ruleId: "EU_AI_ART_6", source: "EU AI Act", article: "Artikel 6-7", description: "AI-systemen in kritieke infrastructuur, onderwijs, werkgelegenheid, rechtshandhaving en migratie vereisen conformiteitsbeoordeling.", overridesLowerLayers: true },
+            { layer: "EU", title: "Transparantieverplichtingen", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "EU_AI_ART_50", source: "EU AI Act", article: "Artikel 50", description: "AI-systemen die interageren met personen moeten transparant zijn.", overridesLowerLayers: true },
+            { layer: "EU", title: "GPAI-modellen", action: "ESCALATE_REGULATORY", domain: "AI", ruleId: "EU_AI_ART_51", source: "EU AI Act", article: "Artikel 51-56", description: "Aanbieders van General Purpose AI-modellen moeten technische documentatie bijhouden.", overridesLowerLayers: true },
+            { layer: "EU", title: "Minimaal-risico AI", action: "PASS", domain: "AI", ruleId: "EU_AI_ART_95", source: "EU AI Act", article: "Artikel 95", description: "AI-systemen met minimaal risico mogen vrij worden ingezet.", overridesLowerLayers: false },
+            { layer: "NATIONAL", title: "UAVG biometrische gegevens", action: "BLOCK", domain: "AI", ruleId: "NL_UAVG_BIO", source: "UAVG (NL)", article: "Art. 29", description: "Verwerking van biometrische gegevens ter identificatie is verboden.", overridesLowerLayers: true },
+            { layer: "NATIONAL", title: "WGBO AI in zorg", action: "ESCALATE_HUMAN", domain: "AI", ruleId: "NL_WGBO_AI", source: "WGBO (NL)", article: "Art. 7:448 BW", description: "AI-ondersteuning bij medische besluitvorming vereist informatie aan de patiënt.", overridesLowerLayers: false },
+            { layer: "NATIONAL", title: "AP toezicht algoritmes", action: "ESCALATE_REGULATORY", domain: "AI", ruleId: "NL_AP_ALGO", source: "Autoriteit Persoonsgegevens", article: "AVG Art. 35", description: "De AP houdt toezicht op geautomatiseerde besluitvorming.", overridesLowerLayers: false },
+            { layer: "REGIONAL", title: "GGD regionaal protocol AI", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "REG_GGD_AI", source: "GGD Protocol", article: "Regionaal", description: "Regionale GGD-protocollen voor AI-gebruik.", overridesLowerLayers: false },
+            { layer: "MUNICIPAL", title: "Gemeentelijk algoritmeregister", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "MUN_ALGO_REG", source: "Gemeentelijke verordening", article: "Lokaal", description: "Gemeente vereist registratie van algoritmes.", overridesLowerLayers: false },
+          ],
+        },
+        {
+          name: "Erasmus", description: "Erasmus MC — Klinisch AI governance scope", orgName: "Erasmus MC", isDefault: "true",
+          categories: [
+            { name: "Observation", color: "text-green-400", label: "Observatie", status: "PASS", keywords: [] as string[], escalation: null },
+            { name: "PRIVACY_DOSSIER", color: "", label: "Privacy / Dossier", status: "ESCALATE_HUMAN", keywords: ["dossier","medisch dossier","patiëntgegevens","ouders","avg","wgbo","beroepsgeheim","inzagerecht","deel_dossier"], escalation: "DPO" },
+            { name: "BIOMETRIC_BLOCK", color: "", label: "Biometrische Identificatie (Verboden)", status: "BLOCK", keywords: ["gezichtsherkenning","facial recognition","gezichtsprofiel","biometrische identificatie commercieel"], escalation: "AI Office / Toezichthouder" },
+          ],
+          documents: [] as any[],
+          rules: [
+            { layer: "EU", title: "Verboden AI-praktijken", action: "BLOCK", domain: "AI", ruleId: "EU_AI_ART_5", source: "EU AI Act", article: "Artikel 5", description: "AI-systemen voor sociale scoring zijn verboden.", overridesLowerLayers: true },
+            { layer: "EU", title: "Hoog-risico AI-systemen", action: "ESCALATE_HUMAN", domain: "AI", ruleId: "EU_AI_ART_6", source: "EU AI Act", article: "Artikel 6-7", description: "AI in kritieke infrastructuur vereist conformiteitsbeoordeling.", overridesLowerLayers: true },
+            { layer: "EU", title: "Transparantieverplichtingen", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "EU_AI_ART_50", source: "EU AI Act", article: "Artikel 50", description: "AI-systemen moeten transparant zijn.", overridesLowerLayers: true },
+            { layer: "EU", title: "GPAI-modellen", action: "ESCALATE_REGULATORY", domain: "AI", ruleId: "EU_AI_ART_51", source: "EU AI Act", article: "Artikel 51-56", description: "GPAI-modellen vereisen documentatie.", overridesLowerLayers: true },
+            { layer: "EU", title: "Minimaal-risico AI", action: "PASS", domain: "AI", ruleId: "EU_AI_ART_95", source: "EU AI Act", article: "Artikel 95", description: "Minimaal risico AI mag vrij ingezet.", overridesLowerLayers: false },
+            { layer: "NATIONAL", title: "UAVG biometrische gegevens", action: "BLOCK", domain: "AI", ruleId: "NL_UAVG_BIO", source: "UAVG (NL)", article: "Art. 29", description: "Biometrische gegevens verboden.", overridesLowerLayers: true },
+            { layer: "NATIONAL", title: "WGBO AI in zorg", action: "ESCALATE_HUMAN", domain: "AI", ruleId: "NL_WGBO_AI", source: "WGBO (NL)", article: "Art. 7:448 BW", description: "AI in zorg vereist patiëntinformatie.", overridesLowerLayers: false },
+            { layer: "NATIONAL", title: "AP toezicht algoritmes", action: "ESCALATE_REGULATORY", domain: "AI", ruleId: "NL_AP_ALGO", source: "Autoriteit Persoonsgegevens", article: "AVG Art. 35", description: "AP houdt toezicht op algoritmes.", overridesLowerLayers: false },
+            { layer: "REGIONAL", title: "GGD regionaal protocol AI", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "REG_GGD_AI", source: "GGD Protocol", article: "Regionaal", description: "GGD-protocollen voor AI.", overridesLowerLayers: false },
+            { layer: "MUNICIPAL", title: "Gemeentelijk algoritmeregister", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "MUN_ALGO_REG", source: "Gemeentelijke verordening", article: "Lokaal", description: "Gemeente algoritmeregister.", overridesLowerLayers: false },
+          ],
+        },
+      ];
 
-    // ── Step 5: Hypatia (evaluator) ────────────────────────────────────────────
-    // Gate profile evaluation — applies domain-specific rules.
-    const t4 = Date.now();
-    const hypatiaStatus: StepStatus =
-      gateResult.status === "BLOCK" ? "blocked"
-      : gateResult.status === "ESCALATE_HUMAN" || gateResult.status === "ESCALATE_REGULATORY" ? "escalated"
-      : gateResult.status === "PASS_WITH_TRANSPARENCY" ? "flagged"
-      : "pass";
-    const hypatiaStep: PipelineStep = {
-      agent: "Hypatia",
-      role: "Evaluator — gate profile rules applied",
-      status: hypatiaStatus,
-      durationMs: Date.now() - t4,
-      result: {
-        gateProfile: profile,
-        gateStatus: gateResult.status,
-        reason: gateResult.reason,
-        escalation: gateResult.escalation,
-      },
-    };
-    steps.push(hypatiaStep);
-
-    // ── Step 6: Cerberus (boundary) ────────────────────────────────────────────
-    // Resolves the final decision via the formal decision lattice.
-    // D_final = maxDecision(D_gate, D_scope)
-    const t5 = Date.now();
-    let scopeDecision: GateDecision | null = null;
-    let scopeCategory: string | null = null;
-    let scopeEscalation: string | null = null;
-    let scopeReason: string | null = null;
-    if (gateResult.status === "PASS" || gateResult.status === "PASS_WITH_TRANSPARENCY") {
-      let scope: Scope | undefined;
-      if (scopeId) {
-        scope = await storage.getScope(scopeId);
-      } else {
-        const allScopes = await storage.getScopes();
-        scope = allScopes.find(s => s.status === "LOCKED");
+      const created: string[] = [];
+      for (const def of scopeDefs) {
+        const existing = existingScopes.find(s => s.name === def.name);
+        if (existing) { created.push(`${def.name} (already exists)`); continue; }
+        const orgId = def.orgName ? createdOrgs[def.orgName] || null : null;
+        await storage.createScope({
+          name: def.name, description: def.description, orgId, categories: def.categories,
+          documents: def.documents, rules: def.rules, isDefault: def.isDefault,
+        });
+        created.push(`${def.name} (created, org: ${def.orgName || "none"})`);
       }
-      if (scope) {
-        const sr = classifyWithScope(text, scope);
-        scopeDecision = sr.status;
-        scopeCategory = sr.category;
-        scopeEscalation = sr.escalation;
-        scopeReason = sr.reason;
-      }
+
+      const finalOrgs = await storage.getOrganizations();
+      const finalScopes = await storage.getScopes();
+      return res.json({
+        success: true,
+        organizations: finalOrgs.map(o => ({ name: o.name, gateProfile: o.gateProfile })),
+        scopes: created,
+        totals: { organizations: finalOrgs.length, scopes: finalScopes.length },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
     }
-    const cerberusDecision = cerberusEnforce(gateResult.status, scopeDecision);
-    const latticeComparison = scopeDecision
-      ? compareDecision(gateResult.status, scopeDecision)
-      : null;
-    const cerberusStep: PipelineStep = {
-      agent: "Cerberus",
-      role: "Guardian — absolute boundary enforcement via decision lattice",
-      status: cerberusDecision === "BLOCK" ? "blocked"
-        : cerberusDecision === "ESCALATE_HUMAN" || cerberusDecision === "ESCALATE_REGULATORY" ? "escalated"
-        : cerberusDecision === "PASS_WITH_TRANSPARENCY" ? "flagged"
-        : "pass",
-      durationMs: Date.now() - t5,
-      result: {
-        gateDecision: gateResult.status,
-        scopeDecision,
-        scopeCategory,
-        scopeEscalation,
-        scopeReason,
-        cerberusDecision,
-        latticeComparison,
-        lattice: getLattice(),
-        formula: "D_final = maxDecision(D_gate, D_scope)",
-      },
-    };
-    steps.push(cerberusStep);
-
-    // ── Step 7: TaoGate (decision) ─────────────────────────────────────────────
-    // Applies the final authoritative decision.
-    const t6 = Date.now();
-    const finalDecision = cerberusDecision;
-    const taogateStep: PipelineStep = {
-      agent: "TaoGate",
-      role: "Decision — final authoritative gate outcome",
-      status: finalDecision === "BLOCK" ? "blocked"
-        : finalDecision === "ESCALATE_HUMAN" || finalDecision === "ESCALATE_REGULATORY" ? "escalated"
-        : finalDecision === "PASS_WITH_TRANSPARENCY" ? "flagged"
-        : "pass",
-      durationMs: Date.now() - t6,
-      result: {
-        decision: finalDecision,
-        authoritative: true,
-      },
-    };
-    steps.push(taogateStep);
-
-    // ── Step 8: Sandbox (executor) ─────────────────────────────────────────────
-    // In production the gate logic runs inside a hermetic QuickJS WASM VM with
-    // fuel-based instruction-counter termination. The trace notes this layer.
-    const t7 = Date.now();
-    const sandboxStep: PipelineStep = {
-      agent: "Sandbox",
-      role: "Executor — hermetic QuickJS WASM VM (fuel-limited)",
-      status: "pass",
-      durationMs: Date.now() - t7,
-      result: {
-        engine: "QuickJS WASM",
-        fuelLimited: true,
-        hermeticIo: true,
-        note: "Gate logic runs inside WASM sandbox during production classify calls.",
-      },
-    };
-    steps.push(sandboxStep);
-
-    // ── Step 9: Audit (recorder) ───────────────────────────────────────────────
-    // In production the decision is appended to the WORM hash-chain (S3 Object
-    // Lock, 7-year retention). The trace notes this without writing an entry.
-    const t8 = Date.now();
-    const auditStep: PipelineStep = {
-      agent: "Audit",
-      role: "Recorder — WORM hash-chain (Tabularium)",
-      status: "logged",
-      durationMs: Date.now() - t8,
-      result: {
-        wormEnabled: Boolean(process.env.WORM_S3_BUCKET),
-        retention: "7 years (S3 Object Lock COMPLIANCE mode)",
-        note: "Trace calls are not written to the WORM audit chain.",
-      },
-    };
-    steps.push(auditStep);
-
-    const totalMs = Date.now() - start;
-
-    return res.json({
-      input: text,
-      profile,
-      decision: finalDecision,
-      durationMs: totalMs,
-      pipeline: steps,
-    });
   });
 
   return httpServer;

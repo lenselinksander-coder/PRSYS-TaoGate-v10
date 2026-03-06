@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Building2, Layers, Plug, ScrollText, Activity, Eye, FileInput, ArrowRight } from "lucide-react";
+import { Building2, Layers, Plug, ScrollText, Activity, Eye, FileInput, ArrowRight, DatabaseZap, CheckCircle2, Loader2 } from "lucide-react";
 
 type SystemInfo = {
   version: string;
@@ -13,11 +13,21 @@ type SystemInfo = {
   sectors: string[];
 };
 
+type SeedResult = {
+  success: boolean;
+  organizations: { name: string; gateProfile: string }[];
+  scopes: string[];
+  totals: { organizations: number; scopes: number };
+};
+
 export default function DashboardPage() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [seedResult, setSeedResult] = useState<SeedResult | null>(null);
+  const [seedError, setSeedError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadInfo = useCallback(() => {
     fetch("/api/system/info")
       .then(r => r.json())
       .then(setInfo)
@@ -25,17 +35,36 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { loadInfo(); }, [loadInfo]);
+
+  const handleSeed = async () => {
+    setSeeding(true);
+    setSeedError(null);
+    setSeedResult(null);
+    try {
+      const res = await fetch("/api/seed-demo", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Seed mislukt");
+      setSeedResult(data);
+      loadInfo();
+    } catch (err: any) {
+      setSeedError(err.message);
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const cards = [
-    { title: "Organisaties", value: info?.organizations ?? 0, icon: Building2, path: "/organizations", color: "text-blue-400", desc: "Beheer organisaties en hun gate-profielen" },
-    { title: "Scopes", value: info?.scopes ?? 0, icon: Layers, path: "/scopes", color: "text-cyan-400", desc: "Datasets met regels, categorieën en documenten" },
-    { title: "Connectors", value: info?.connectors ?? 0, icon: Plug, path: "/connectors", color: "text-purple-400", desc: "Externe AI-agents en datakoppelingen" },
-    { title: "Gateway Intents", value: info?.intents?.total ?? 0, icon: ScrollText, path: "/gateway-logs", color: "text-amber-400", desc: "Verwerkte intents via de universele gateway" },
+    { title: "Organisaties", value: info?.organizations ?? 0, icon: Building2, path: "/admin/organizations", color: "text-blue-400", desc: "Beheer organisaties en hun gate-profielen" },
+    { title: "Scopes", value: info?.scopes ?? 0, icon: Layers, path: "/admin/scopes", color: "text-cyan-400", desc: "Datasets met regels, categorieën en documenten" },
+    { title: "Connectors", value: info?.connectors ?? 0, icon: Plug, path: "/admin/connectors", color: "text-purple-400", desc: "Externe AI-agents en datakoppelingen" },
+    { title: "Gateway Intents", value: info?.intents?.total ?? 0, icon: ScrollText, path: "/admin/gateway-logs", color: "text-amber-400", desc: "Verwerkte intents via de universele gateway" },
   ];
 
   const modules = [
-    { title: "ARGOS (TaoGate)", desc: "Pre-governance classificatie met pluggable gate-profielen", icon: Eye, path: "/triage" },
-    { title: "OLYMPIA", desc: "Jurisdictionele regelconflict-resolutie over 4 lagen", icon: Activity, path: "/olympia" },
-    { title: "Dataset Import", desc: "CSV/JSON datasets importeren als nieuwe Scopes", icon: FileInput, path: "/import" },
+    { title: "ARGOS (TaoGate)", desc: "Pre-governance classificatie met pluggable gate-profielen", icon: Eye, path: "/admin/triage" },
+    { title: "OLYMPIA", desc: "Jurisdictionele regelconflict-resolutie over 4 lagen", icon: Activity, path: "/admin/olympia" },
+    { title: "Dataset Import", desc: "CSV/JSON datasets importeren als nieuwe Scopes", icon: FileInput, path: "/admin/import" },
   ];
 
   return (
@@ -105,6 +134,39 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          <div className="mb-8 rounded-xl bg-card/50 border border-border/40 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <DatabaseZap className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-bold font-mono">Demo-data laden</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Laad standaard organisaties (Erasmus MC, Kraaijenvanger) en scopes (LEYEN, Erasmus) in de database. Veilig om meerdere keren uit te voeren — bestaande data wordt niet overschreven.
+            </p>
+            {seedResult ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-green-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-sm font-medium">Geladen: {seedResult.totals.organizations} organisaties, {seedResult.totals.scopes} scopes</span>
+                </div>
+                <ul className="text-xs text-muted-foreground space-y-1 ml-6" data-testid="list-seed-results">
+                  {seedResult.scopes.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            ) : seedError ? (
+              <div className="text-sm text-red-400">{seedError}</div>
+            ) : (
+              <button
+                data-testid="button-seed-demo"
+                onClick={handleSeed}
+                disabled={seeding}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30 transition-all disabled:opacity-50"
+              >
+                {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <DatabaseZap className="w-4 h-4" />}
+                {seeding ? "Bezig met laden..." : "Laad demo-data"}
+              </button>
+            )}
+          </div>
 
           <div>
             <h2 className="text-lg font-bold font-mono mb-4">Modules</h2>

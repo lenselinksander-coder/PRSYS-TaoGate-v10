@@ -7,6 +7,9 @@ import OrganizationsPage from "./pages/OrganizationsPage";
 import ConnectorsPage from "./pages/ConnectorsPage";
 import ImportPage from "./pages/ImportPage";
 import GatewayLogsPage from "./pages/GatewayLogsPage";
+import OlympiaPage from "./pages/OlympiaPage";
+import IngestPage from "./pages/IngestPage";
+import ScopesPage from "./pages/ScopesPage";
 import TriagePage from "./TriagePage";
 import CastraPage from "./pages/CastraPage";
 
@@ -19,8 +22,11 @@ function AdminRoutes() {
         <Route path="triage" element={<TriagePage />} />
         <Route path="castra" element={<CastraPage />} />
         <Route path="connectors" element={<ConnectorsPage />} />
+        <Route path="scopes" element={<ScopesPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="gateway-logs" element={<GatewayLogsPage />} />
+        <Route path="olympia" element={<OlympiaPage />} />
+        <Route path="ingest" element={<IngestPage />} />
       </Routes>
     </AdminLayout>
   );

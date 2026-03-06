@@ -1,10 +1,14 @@
 // server/trace/traceRunner.ts
 //
-// ORFHEUSS Trace Pipeline
+// ORFHEUSS Trace Pipeline — OLYMPIA-first ordering (EN-2026-002)
 //
 // Full pipeline:
-//   INPUT → Argos → Arachne → Logos → Hypatia → Phronesis
-//         → Cerberus → TaoGate → Sandbox → Hermes → Tabularium
+//   INPUT → Argos → Arachne → Logos → Cerberus → Hypatia → Phronesis
+//         → TaoGate → Sandbox → Hermes → Tabularium
+//
+// OLYMPIA-first: Cerberus (boundary/gate) runs BEFORE Hypatia (risk) and
+// Phronesis (capacity). If Cerberus issues BLOCK (e.g. CANON_A1), subsequent
+// risk/capacity steps are short-circuited.
 //
 // TaoGate Decision Lattice (Lex Cerberus):
 //   D = { PASS, PASS_WITH_TRANSPARENCY, ESCALATE, BLOCK }
@@ -161,47 +165,74 @@ export async function runTrace(opts: TraceInput): Promise<TraceResult> {
     durationMs: Date.now() - t,
   });
 
-  // ── Step 4: Hypatia (Risk) ────────────────────────────────────────────────
-  t = Date.now();
-  const hypatia = hypatiaRisk(impact, probability);
-  steps.push({
-    name: "Hypatia",
-    symbol: "⚖",
-    role: "Risk — risicoformule Risk = Impact × Probability",
-    decision: normaliseDecision(hypatia.decision),
-    detail: `Impact=${impact.toFixed(2)} × Kans=${probability.toFixed(2)} = Risico ${hypatia.risk.toFixed(3)} (drempel ${hypatia.thresholdLabel}). ${hypatia.reason}`,
-    durationMs: Date.now() - t,
-  });
-
-  // ── Step 5: Phronesis (Capacity) ──────────────────────────────────────────
-  t = Date.now();
-  const phronesis = phronesisCapacity(tau, omega, hypatia.risk);
-  steps.push({
-    name: "Phronesis",
-    symbol: "🧭",
-    role: "Capacity — SI = τ × ω; besluitruimte vs risico",
-    decision: phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : "PASS",
-    detail: `SI = ${tau.toFixed(2)} × ${omega.toFixed(2)} = ${phronesis.SI.toFixed(3)}. ${phronesis.reason}`,
-    durationMs: Date.now() - t,
-  });
-
-  // ── Step 6: Cerberus (Boundary) ───────────────────────────────────────────
+  // ── Step 4: Cerberus (Boundary) — OLYMPIA-first ──────────────────────────
   t = Date.now();
   const D_gate_raw = runGate(input, profile);
   const D_gate = D_gate_raw.status;
+  const cerberusBlocked = D_gate === "BLOCK";
   steps.push({
     name: "Cerberus",
     symbol: "🐺",
     role: "Boundary — gate-profiel grenshandhaving (Lex Cerberus: D_final ≥ D_gate)",
     decision: D_gate,
-    detail: `Gate profiel '${profile}' resultaat: ${D_gate}. ${D_gate_raw.reason}`,
+    detail: `Gate profiel '${profile}' resultaat: ${D_gate}. ${D_gate_raw.reason}${cerberusBlocked ? " ⛔ Short-circuit: Hypatia/Phronesis overgeslagen." : ""}`,
     durationMs: Date.now() - t,
   });
 
+  // ── Step 5: Hypatia (Risk) ────────────────────────────────────────────────
+  let hypatia: HypatiaResult;
+  if (cerberusBlocked) {
+    hypatia = { risk: 1.0, decision: "BLOCK", thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief." };
+    steps.push({
+      name: "Hypatia",
+      symbol: "⚖",
+      role: "Risk — risicoformule Risk = Impact × Probability",
+      decision: "SKIPPED",
+      detail: "Overgeslagen: Cerberus heeft BLOCK afgegeven. Risico-analyse niet nodig.",
+      durationMs: 0,
+    });
+  } else {
+    t = Date.now();
+    hypatia = hypatiaRisk(impact, probability);
+    steps.push({
+      name: "Hypatia",
+      symbol: "⚖",
+      role: "Risk — risicoformule Risk = Impact × Probability",
+      decision: normaliseDecision(hypatia.decision),
+      detail: `Impact=${impact.toFixed(2)} × Kans=${probability.toFixed(2)} = Risico ${hypatia.risk.toFixed(3)} (drempel ${hypatia.thresholdLabel}). ${hypatia.reason}`,
+      durationMs: Date.now() - t,
+    });
+  }
+
+  // ── Step 6: Phronesis (Capacity) ──────────────────────────────────────────
+  let phronesis: PhronesisResult;
+  if (cerberusBlocked) {
+    phronesis = { SI: 0, decision: "BLOCK", reason: "Overgeslagen — Cerberus BLOCK actief." };
+    steps.push({
+      name: "Phronesis",
+      symbol: "🧭",
+      role: "Capacity — SI = τ × ω; besluitruimte vs risico",
+      decision: "SKIPPED",
+      detail: "Overgeslagen: Cerberus heeft BLOCK afgegeven. Capaciteitsanalyse niet nodig.",
+      durationMs: 0,
+    });
+  } else {
+    t = Date.now();
+    phronesis = phronesisCapacity(tau, omega, hypatia.risk);
+    steps.push({
+      name: "Phronesis",
+      symbol: "🧭",
+      role: "Capacity — SI = τ × ω; besluitruimte vs risico",
+      decision: phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : "PASS",
+      detail: `SI = ${tau.toFixed(2)} × ${omega.toFixed(2)} = ${phronesis.SI.toFixed(3)}. ${phronesis.reason}`,
+      durationMs: Date.now() - t,
+    });
+  }
+
   // ── Step 7: TaoGate (Decision Lattice) ────────────────────────────────────
   t = Date.now();
-  const D_scope = normaliseDecision(hypatia.decision);
-  const D_runtime = phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : "PASS";
+  const D_scope = cerberusBlocked ? "BLOCK" as LatticeDecision : normaliseDecision(hypatia.decision);
+  const D_runtime = cerberusBlocked ? "BLOCK" as string : (phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : "PASS");
 
   // D_final = max(D_gate, D_scope, D_runtime)
   const D_after_scope   = latticeMax(D_gate, D_scope);

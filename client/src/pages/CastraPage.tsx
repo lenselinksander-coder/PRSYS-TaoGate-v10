@@ -64,6 +64,8 @@ function decisionStyle(decision: string) {
     case "CLASSIFIED":
     case "RECORDED":
       return { color: "#00ff41", bg: "rgba(0,255,65,0.08)", border: "rgba(0,255,65,0.25)", label: decision };
+    case "SKIPPED":
+      return { color: "#555", bg: "rgba(80,80,80,0.06)", border: "rgba(80,80,80,0.20)", label: "SKIPPED" };
     default:
       return { color: "#888", bg: "rgba(128,128,128,0.08)", border: "rgba(128,128,128,0.25)", label: decision };
   }
@@ -97,9 +99,9 @@ const PIPELINE_STEPS = [
   { name: "Argos",      symbol: "👁",  role: "Observe",    zone: "Porta"      },
   { name: "Arachne",    symbol: "🕸",  role: "Structure",  zone: "Via"        },
   { name: "Logos",      symbol: "📐",  role: "Classify",   zone: "Via"        },
+  { name: "Cerberus",   symbol: "🐺",  role: "Boundary",   zone: "Principia"  },
   { name: "Hypatia",    symbol: "⚖",  role: "Risk",       zone: "Principia"  },
   { name: "Phronesis",  symbol: "🧭",  role: "Capacity",   zone: "Principia"  },
-  { name: "Cerberus",   symbol: "🐺",  role: "Boundary",   zone: "Principia"  },
   { name: "TaoGate",    symbol: "☯",  role: "Decision",   zone: "Principia"  },
   { name: "Sandbox",    symbol: "🏛",  role: "Execute",    zone: "Campus"     },
   { name: "Hermes",     symbol: "⚡",  role: "Comms",      zone: "Via"        },
@@ -169,7 +171,7 @@ export default function CastraPage() {
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
           Visualiseer de volledige ORFHEUSS besluitpipeline: van Porta (input) tot Tabularium (audit).
-          Elke stap toont het besluit van Argos → Arachne → Logos → Hypatia → Phronesis → Cerberus → TaoGate → Sandbox → Hermes → Tabularium.
+          OLYMPIA-first volgorde: Argos → Arachne → Logos → Cerberus → Hypatia → Phronesis → TaoGate → Sandbox → Hermes → Tabularium.
         </p>
       </div>
 
@@ -305,6 +307,60 @@ export default function CastraPage() {
         )}
       </div>
 
+      {/* ── CANON_A1 Banner ─────────────────────────────────── */}
+      {result && result.steps.some(s => s.detail?.includes("CANON_A1") || s.detail?.includes("Canon A1")) && (
+        <div
+          data-testid="banner-canon-a1"
+          style={{
+            background: "rgba(255,0,0,0.08)",
+            border: "2px solid rgba(255,40,40,0.60)",
+            borderRadius: 8,
+            padding: "12px 16px",
+            marginBottom: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <XCircle style={{ width: 22, height: 22, color: "#ff4444", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 13, color: "#ff4444", letterSpacing: "0.12em" }}>
+              CONSTITUTIONELE BLOKKERING — CANON LAW A1
+            </div>
+            <div style={{ fontSize: 11, color: "#ff8888", marginTop: 2 }}>
+              EU AI Act Art. 5(1)(a) — Politieke manipulatie gedetecteerd. Absolute blokkering. Escalatie: AI Office / Toezichthouder.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── CANON_A2 Banner ─────────────────────────────────── */}
+      {result && result.steps.some(s => s.detail?.includes("CANON_A2") || s.detail?.includes("Canon A2")) && (
+        <div
+          data-testid="banner-canon-a2"
+          style={{
+            background: "rgba(255,100,0,0.08)",
+            border: "2px solid rgba(255,100,0,0.60)",
+            borderRadius: 8,
+            padding: "12px 16px",
+            marginBottom: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <XCircle style={{ width: 22, height: 22, color: "#ff6600", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 13, color: "#ff6600", letterSpacing: "0.12em" }}>
+              CONSTITUTIONELE BLOKKERING — CANON LAW A2
+            </div>
+            <div style={{ fontSize: 11, color: "#ff9944", marginTop: 2 }}>
+              AVG/GDPR — Onrechtmatige verwerking van persoonsgegevens gedetecteerd. Absolute blokkering. Escalatie: Data Protection Officer.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Pipeline steps ─────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
         {PIPELINE_STEPS.map((meta, idx) => {
@@ -392,10 +448,11 @@ export default function CastraPage() {
               ⚖ HYPATIA — Risk = Impact × Probability
             </div>
             <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-              <div><span style={{ opacity: 0.5 }}>Impact:</span> {result.hypatia.impact.toFixed(3)}</div>
-              <div><span style={{ opacity: 0.5 }}>Kans:</span> {result.hypatia.probability.toFixed(3)}</div>
+              {result.hypatia.impact != null && <div><span style={{ opacity: 0.5 }}>Impact:</span> {result.hypatia.impact.toFixed(3)}</div>}
+              {result.hypatia.probability != null && <div><span style={{ opacity: 0.5 }}>Kans:</span> {result.hypatia.probability.toFixed(3)}</div>}
               <div><span style={{ opacity: 0.5 }}>Risico:</span> <strong style={{ color: "#00ccff" }}>{result.hypatia.risk.toFixed(4)}</strong></div>
               <div><span style={{ opacity: 0.5 }}>Drempel:</span> {result.hypatia.thresholdLabel}</div>
+              {result.hypatia.reason?.includes("Overgeslagen") && <div style={{ opacity: 0.5, fontStyle: "italic" }}>Overgeslagen (Cerberus BLOCK)</div>}
             </div>
             <div style={{ marginTop: 6 }}>
               <DecisionBadge decision={result.hypatia.decision} />
@@ -408,10 +465,11 @@ export default function CastraPage() {
               🧭 PHRONESIS — SI = τ × ω
             </div>
             <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-              <div><span style={{ opacity: 0.5 }}>τ (tijd):</span> {result.phronesis.tau.toFixed(2)}</div>
-              <div><span style={{ opacity: 0.5 }}>ω (capaciteit):</span> {result.phronesis.omega.toFixed(2)}</div>
+              {result.phronesis.tau != null && <div><span style={{ opacity: 0.5 }}>τ (tijd):</span> {result.phronesis.tau.toFixed(2)}</div>}
+              {result.phronesis.omega != null && <div><span style={{ opacity: 0.5 }}>ω (capaciteit):</span> {result.phronesis.omega.toFixed(2)}</div>}
               <div><span style={{ opacity: 0.5 }}>SI:</span> <strong style={{ color: "#ffcc00" }}>{result.phronesis.SI.toFixed(4)}</strong></div>
-              <div><span style={{ opacity: 0.5 }}>Overbelast:</span> {result.phronesis.overloaded ? "JA" : "nee"}</div>
+              {result.phronesis.overloaded != null && <div><span style={{ opacity: 0.5 }}>Overbelast:</span> {result.phronesis.overloaded ? "JA" : "nee"}</div>}
+              {result.phronesis.reason?.includes("Overgeslagen") && <div style={{ opacity: 0.5, fontStyle: "italic" }}>Overgeslagen (Cerberus BLOCK)</div>}
             </div>
             <div style={{ marginTop: 6 }}>
               <DecisionBadge decision={result.phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : result.phronesis.decision} />

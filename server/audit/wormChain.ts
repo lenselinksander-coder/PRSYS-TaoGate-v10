@@ -21,12 +21,24 @@
 //   AWS_ACCESS_KEY_ID
 //   AWS_SECRET_ACCESS_KEY
 
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-} from "@aws-sdk/client-s3";
 import crypto from "crypto";
+
+let S3Client: any;
+let PutObjectCommand: any;
+let GetObjectCommand: any;
+
+async function loadS3SDK() {
+  if (S3Client) return true;
+  try {
+    const sdk = await import("@aws-sdk/client-s3");
+    S3Client = sdk.S3Client;
+    PutObjectCommand = sdk.PutObjectCommand;
+    GetObjectCommand = sdk.GetObjectCommand;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -75,14 +87,14 @@ const RETENTION_YEARS = 7;
 
 let seq = 0;
 let prevHash = GENESIS_HASH;
-let s3Client: S3Client | null = null;
+let s3Client: any = null;
 let bucketName: string | null = null;
 
 // ── Client initialisation ─────────────────────────────────────────────────────
 
-function getS3(): { client: S3Client; bucket: string } | null {
+function getS3(): { client: any; bucket: string } | null {
   const bucket = process.env.WORM_S3_BUCKET;
-  if (!bucket) return null;
+  if (!bucket || !S3Client) return null;
 
   if (!s3Client) {
     s3Client = new S3Client({
@@ -125,6 +137,7 @@ function canonical(obj: Record<string, unknown>): string {
  * so the chain continues correctly after a server restart.
  */
 export async function initWormChain(): Promise<void> {
+  await loadS3SDK();
   const ctx = getS3();
   if (!ctx) return;
 

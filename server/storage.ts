@@ -1,6 +1,6 @@
 import {
   type Observation, type InsertObservation, observations,
-  type Scope, type InsertScope, scopes,
+  type Scope, type InsertScope, scopes, type ScopeRule,
   type Organization, type InsertOrganization, organizations,
   type Connector, type InsertConnector, connectors,
   type Intent, type InsertIntent, intents,
@@ -37,6 +37,8 @@ export interface IStorage {
   updateConnector(id: string, connector: Partial<InsertConnector>): Promise<Connector | undefined>;
   deleteConnector(id: string): Promise<boolean>;
   touchConnector(id: string): Promise<void>;
+
+  upsertScopeRules(scopeId: string, rules: ScopeRule[]): Promise<Scope | undefined>;
 
   createIntent(intent: InsertIntent): Promise<Intent>;
   getIntents(orgId?: string, limit?: number): Promise<Intent[]>;
@@ -106,6 +108,40 @@ export class DatabaseStorage implements IStorage {
 
   async getDefaultScope(): Promise<Scope | undefined> {
     const [result] = await db.select().from(scopes).where(eq(scopes.isDefault!, "true"));
+    return result;
+  }
+
+  async upsertScopeRules(scopeId: string, rules: ScopeRule[]): Promise<Scope | undefined> {
+    const scope = await this.getScope(scopeId);
+    if (!scope) return undefined;
+
+    const existingRules: ScopeRule[] = scope.rules || [];
+    const ruleMap = new Map<string, ScopeRule>();
+
+    for (const rule of existingRules) {
+      ruleMap.set(rule.ruleId, rule);
+    }
+
+    for (const incoming of rules) {
+      const existing = ruleMap.get(incoming.ruleId);
+      if (existing) {
+        ruleMap.set(incoming.ruleId, {
+          ...existing,
+          action: incoming.action,
+          description: incoming.description,
+          layer: incoming.layer,
+          overridesLowerLayers: incoming.overridesLowerLayers,
+        });
+      } else {
+        ruleMap.set(incoming.ruleId, incoming);
+      }
+    }
+
+    const merged = Array.from(ruleMap.values());
+    const [result] = await db.update(scopes)
+      .set({ rules: merged, updatedAt: new Date() })
+      .where(eq(scopes.id, scopeId))
+      .returning();
     return result;
   }
 
