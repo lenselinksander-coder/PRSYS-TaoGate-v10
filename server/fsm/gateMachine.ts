@@ -3,31 +3,21 @@
 // XState v5 state machine for gate evaluation lifecycle.
 //
 // State graph:
-//   idle → (EVALUATE) → evaluating → blocked             (terminal)
-//                                  → passed              (terminal)
-//                                  → passed_transparent  (terminal)
-//                                  → escalated_human     (terminal)
-//                                  → escalated_regulatory (terminal)
+//   evaluating → blocked             (terminal)
+//              → passed              (terminal)
+//              → passed_transparent  (terminal)
+//              → escalated_human     (terminal)
+//              → escalated_regulatory (terminal)
 //
-// The TypeScript compiler rejects any transition to a state that is not
-// reachable from evaluating, or any guard that maps to the wrong terminal
-// state. PREFLIGHT_OK is only constructable after passing terminal states.
+// Input is provided at actor-creation time via createActor(gateLogic, { input }).
+// Each terminal state emits a typed output (GateResult) via snapshot.output.
 
 import { setup, assign, fromPromise } from "xstate";
 import type { GateProfile } from "@shared/schema";
 import type { GateResult } from "../gateSystem";
 import { runGateWasm } from "../gateSystem";
 import type { GateMachineContext } from "./gateTypes";
-
-// ── Events ────────────────────────────────────────────────────────────────────
-
-export type EvaluateEvent = {
-  type: "EVALUATE";
-  input: string;
-  profile: GateProfile;
-};
-
-export type GateMachineEvent = EvaluateEvent;
+import type { GateInput, GateOutput } from "./gateOrchestrator";
 
 // ── BLOCK fallback result (used when the sandbox itself errors) ───────────────
 
@@ -45,10 +35,11 @@ function sandboxBlockResult(): GateResult {
 
 // ── Machine definition ────────────────────────────────────────────────────────
 
-export const gateMachine = setup({
+export const gateLogic = setup({
   types: {
+    input: {} as GateInput,
+    output: {} as GateOutput,
     context: {} as GateMachineContext,
-    events: {} as GateMachineEvent,
   },
   actors: {
     // evaluateGate: runs the gate inside the QuickJS WASM sandbox (Feature 1).
@@ -62,26 +53,14 @@ export const gateMachine = setup({
   },
 }).createMachine({
   id: "gate",
-  initial: "idle",
-  context: {
-    input: null,
-    profile: null,
+  initial: "evaluating",
+  context: ({ input }) => ({
+    input: input.text,
+    profile: input.profile,
     result: null,
-  } satisfies GateMachineContext,
+  }),
+  output: ({ context }) => context.result as GateOutput,
   states: {
-    idle: {
-      on: {
-        EVALUATE: {
-          target: "evaluating",
-          actions: assign({
-            input: ({ event }) => event.input,
-            profile: ({ event }) => event.profile,
-            result: () => null,
-          }),
-        },
-      },
-    },
-
     evaluating: {
       invoke: {
         src: "evaluateGate",
@@ -142,13 +121,15 @@ export const gateMachine = setup({
 
     // ── Terminal states ───────────────────────────────────────────────────────
     // Each maps 1:1 to a GateResult.status value.
-    // The compiler enforces that code consuming these states uses the correct
-    // discriminated type from gateTypes.ts.
+    // output: forwards context.result as the typed machine output.
 
-    passed: { type: "final" },
-    passed_transparent: { type: "final" },
-    blocked: { type: "final" },
-    escalated_human: { type: "final" },
-    escalated_regulatory: { type: "final" },
+    passed: { type: "final", output: ({ context }) => context.result as GateOutput },
+    passed_transparent: { type: "final", output: ({ context }) => context.result as GateOutput },
+    blocked: { type: "final", output: ({ context }) => context.result as GateOutput },
+    escalated_human: { type: "final", output: ({ context }) => context.result as GateOutput },
+    escalated_regulatory: { type: "final", output: ({ context }) => context.result as GateOutput },
   },
 });
+
+/** @deprecated Use gateLogic instead. */
+export const gateMachine = gateLogic;

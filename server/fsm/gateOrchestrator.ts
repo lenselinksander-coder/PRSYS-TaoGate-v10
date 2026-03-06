@@ -1,22 +1,82 @@
 // server/fsm/gateOrchestrator.ts
 //
-// Async wrapper around the XState gate machine actor.
-// Creates a fresh actor per classify request, drives it, and resolves
-// with the GateResult when the machine reaches any terminal state.
-//
-// Cerberus guarantee: this function NEVER rejects. Any internal failure
-// (machine error state, missing result) resolves as BLOCK — the absolute
-// fail-safe. Callers must never be able to bypass the gate via an exception.
+// Typed async wrapper around the XState gate machine actor.
+// Creates a fresh actor per classify request, starts it with typed input,
+// and resolves/rejects when the machine reaches a terminal state.
 
-import { createActor } from "xstate";
-import { gateMachine } from "./gateMachine";
+import { createActor, ActorRefFrom, SnapshotFrom } from "xstate";
+import { gateLogic } from "./gateMachine";
 import type { GateProfile } from "@shared/schema";
 import type { GateResult } from "../gateSystem";
 
-// ── Cerberus fail-safe BLOCK (returned on orchestrator-level failures) ─────────
+// ── Public types ──────────────────────────────────────────────────────────────
 
-function orchestratorBlockResult(): GateResult {
-  return {
+export interface GateInput {
+  text: string;
+  profile: GateProfile;
+}
+
+export type GateOutput = GateResult;
+
+export interface GateError {
+  message: string;
+  code?: string;
+  cause?: unknown;
+}
+
+// ── Internal actor types ──────────────────────────────────────────────────────
+
+type GateActor = ActorRefFrom<typeof gateLogic>;
+type GateSnapshot = SnapshotFrom<typeof gateLogic>;
+
+// ── runGate ───────────────────────────────────────────────────────────────────
+
+/**
+ * Run the gate FSM for one classify request.
+ *
+ * Resolves with GateOutput when the machine reaches any terminal state.
+ * Rejects with GateError if the machine enters an error state.
+ *
+ * Subscription is explicitly unsubscribed and the actor stopped in both
+ * terminal branches to prevent event-loop retention.
+ */
+export function runGate(input: GateInput): Promise<GateOutput> {
+  const actor: GateActor = createActor(gateLogic, { input }).start();
+
+  return new Promise<GateOutput>((resolve, reject) => {
+    const subscription = actor.subscribe((snapshot: GateSnapshot) => {
+      // Done-pad: strikt getypt via snapshot.output
+      if (snapshot.status === "done") {
+        subscription.unsubscribe();
+        actor.stop();
+        resolve(snapshot.output as GateOutput);
+        return;
+      }
+
+      // Error-pad: strikt getypt via snapshot.error
+      if (snapshot.status === "error") {
+        subscription.unsubscribe();
+        actor.stop();
+        reject(snapshot.error as GateError);
+      }
+    });
+  });
+}
+
+// ── orchestrateGate (backward-compat shim) ────────────────────────────────────
+
+/**
+ * @deprecated Use runGate({ text, profile }) instead.
+ *
+ * Wraps runGate with the old positional-argument signature and restores the
+ * Cerberus fail-safe: any rejection is caught and resolved as BLOCK so that
+ * existing callers that expect a never-rejecting Promise keep working.
+ */
+export async function orchestrateGate(
+  text: string,
+  profile: GateProfile,
+): Promise<GateOutput> {
+  return runGate({ text, profile }).catch((): GateOutput => ({
     status: "BLOCK",
     layer: "SYSTEM",
     band: "ORCHESTRATOR_ERROR",
@@ -24,37 +84,5 @@ function orchestratorBlockResult(): GateResult {
     escalation: "SYSTEM_ADMIN",
     reason: "Gate orchestrator fout — geblokkeerd als fail-safe (Cerberus).",
     signals: null,
-  };
-}
-
-/**
- * Run the gate FSM for one classify request.
- * Returns the GateResult when the machine completes (any terminal state).
- * Never rejects — any machine error or missing result resolves as BLOCK
- * (Cerberus absolute boundary: no exception can bypass the gate).
- */
-export async function orchestrateGate(
-  input: string,
-  profile: GateProfile,
-): Promise<GateResult> {
-  return new Promise<GateResult>((resolve) => {
-    const actor = createActor(gateMachine);
-
-    const subscription = actor.subscribe((snapshot) => {
-      if (snapshot.status === "done") {
-        // Cerberus: missing result is treated as BLOCK, not as an exception
-        subscription.unsubscribe();
-        resolve(snapshot.context.result ?? orchestratorBlockResult());
-        actor.stop();
-      } else if (snapshot.status === "error") {
-        // Cerberus: machine error state is treated as BLOCK, not rethrown
-        subscription.unsubscribe();
-        resolve(orchestratorBlockResult());
-        actor.stop();
-      }
-    });
-
-    actor.start();
-    actor.send({ type: "EVALUATE", input, profile });
-  });
+  }));
 }

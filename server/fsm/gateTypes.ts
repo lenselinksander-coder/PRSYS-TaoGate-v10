@@ -9,13 +9,6 @@ import type { GateProfile } from "@shared/schema";
 
 // ── Per-state context shapes ─────────────────────────────────────────────────
 
-export type IdleContext = {
-  state: "idle";
-  input: null;
-  profile: null;
-  result: null;
-};
-
 export type EvaluatingContext = {
   state: "evaluating";
   input: string;
@@ -69,10 +62,7 @@ export type TerminalGateContext =
 
 // ── Union of all possible contexts ──────────────────────────────────────────
 
-export type GateStateContext =
-  | IdleContext
-  | EvaluatingContext
-  | TerminalGateContext;
+export type GateStateContext = EvaluatingContext | TerminalGateContext;
 
 // ── Flat context used internally by the XState machine ───────────────────────
 // XState v5 requires a single context shape. We use a flat union-friendly

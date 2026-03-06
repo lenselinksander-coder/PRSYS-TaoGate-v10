@@ -11,7 +11,7 @@ import { runValkyrie } from "./valkyrie";
 import { runTaoGate } from "./taogate";
 import { runAudit } from "./audit";
 import { evaluateImplicitPressure, routeImplicitPressure, taoGateSchema } from "./clinical";
-import { orchestrateGate } from "../fsm/gateOrchestrator";
+import { runGate } from "../fsm/gateOrchestrator";
 import { cerberusEnforce, normaliseDecision, latticeMax } from "./types";
 import type {
   PipelineInput,
@@ -209,7 +209,15 @@ export async function gatewayClassify(opts: {
   if (!org) throw new Error("Organisatie niet gevonden");
 
   const gateProfile = (org.gateProfile as GateProfile) || "GENERAL";
-  const gate = await orchestrateGate(text, gateProfile);
+  const gate = await runGate({ text, profile: gateProfile }).catch((): import("../gateSystem").GateResult => ({
+    status: "BLOCK",
+    layer: "SYSTEM",
+    band: "ORCHESTRATOR_ERROR",
+    pressure: "CRITICAL",
+    escalation: "SYSTEM_ADMIN",
+    reason: "Gate orchestrator fout — geblokkeerd als fail-safe (Cerberus).",
+    signals: null,
+  }));
 
   let implicitPressureOverride: ReturnType<typeof routeImplicitPressure> = null;
   let llmSignals: any = null;
