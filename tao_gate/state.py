@@ -4,7 +4,7 @@ tao_gate/state.py — Core types for the ORFHEUSS governance kernel.
 Defines:
   - Mode        : discrete modes of ORFHEUSS (PASS / HOLD / BLOCK).
   - State       : continuous state vector x = (Delta_ext, sigma_ext, omega, tau, TI).
-  - GateParams  : tunable coefficients (alpha, beta, gamma, V_max, TI_min, omega_cap).
+  - GateParams  : tunable coefficients (alpha, beta, gamma, V_max, TI_min).
   - instability : V(x) = alpha * Delta_ext^2 + beta * sigma_ext^2 + gamma * omega^2.
 """
 
@@ -62,20 +62,23 @@ class GateParams:
     Attributes
     ----------
     alpha : float
-        Weight of Delta_ext^2 in V(x).
+        Weight of Delta_ext^2 in V(x).  Must be >= 0.
     beta : float
-        Weight of sigma_ext^2 in V(x).
+        Weight of sigma_ext^2 in V(x).  Must be >= 0.
     gamma : float
-        Weight of omega^2 in V(x).
+        Weight of omega^2 in V(x).  Must be >= 0.
     V_max : float
-        Upper bound of the safety invariant set S.
+        Upper bound of the safety invariant set S.  Must be > 0.
     V_hold_ratio : float
-        Fraction of V_max at which HOLD is triggered (0 < V_hold_ratio < 1).
+        Fraction of V_max at which HOLD is triggered.
+        Must satisfy 0 < V_hold_ratio < 1.
     TI_min : float
-        Minimum acceptable temporal integrity index.
-    omega_max_fn : callable[[float, float], float] | None
-        Optional function (tau, sigma_ext) -> max_omega for O36 check.
-        Defaults to a linear bound: tau - sigma_ext.
+        Minimum acceptable temporal integrity index.  Must be >= 0.
+
+    Raises
+    ------
+    ValueError
+        If any parameter is outside its valid range.
     """
 
     alpha: float = 1.0
@@ -84,6 +87,22 @@ class GateParams:
     V_max: float = 10.0
     V_hold_ratio: float = 0.75
     TI_min: float = 0.5
+
+    def __post_init__(self) -> None:
+        if self.alpha < 0:
+            raise ValueError(f"alpha must be >= 0, got {self.alpha!r}")
+        if self.beta < 0:
+            raise ValueError(f"beta must be >= 0, got {self.beta!r}")
+        if self.gamma < 0:
+            raise ValueError(f"gamma must be >= 0, got {self.gamma!r}")
+        if self.V_max <= 0:
+            raise ValueError(f"V_max must be > 0, got {self.V_max!r}")
+        if not (0.0 < self.V_hold_ratio < 1.0):
+            raise ValueError(
+                f"V_hold_ratio must be in (0, 1), got {self.V_hold_ratio!r}"
+            )
+        if self.TI_min < 0:
+            raise ValueError(f"TI_min must be >= 0, got {self.TI_min!r}")
 
 
 def instability(state: State, params: GateParams) -> float:
