@@ -15,6 +15,7 @@ import {
   preflightCheck,
 } from "./pipeline";
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
+import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace/hypatia";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -723,13 +724,44 @@ export async function registerRoutes(
     try {
       const results = await syncAlgoritmeregister();
       return res.json(
-        results.map((r) => ({
-          algorithm: r.algorithm_id,
-          organization: r.organization,
-          decision: r.decision,
-          risk_score: r.risk_score,
-        }))
+        results.map((r) => {
+          const dpiaLevel = classifyDpiaLevel(r.risk_score ?? 0);
+          return {
+            algorithm: r.algorithm_id,
+            organization: r.organization,
+            decision: r.decision,
+            risk_score: r.risk_score,
+            dpia_level: dpiaLevel,
+            dpia_label: DPIA_LEVEL_LABELS[dpiaLevel],
+          };
+        })
       );
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/dpia-level", async (req, res) => {
+    try {
+      const riskScore = parseFloat(req.query.risk_score as string ?? "0");
+      if (isNaN(riskScore) || riskScore < 0 || riskScore > 1) {
+        return res.status(400).json({ error: "risk_score moet een getal zijn tussen 0 en 1" });
+      }
+      const dpiaLevel = classifyDpiaLevel(riskScore);
+      return res.json({
+        risk_score: riskScore,
+        dpia_level: dpiaLevel,
+        dpia_label: DPIA_LEVEL_LABELS[dpiaLevel],
+        thresholds: { D1: 0.1, D2: 0.2, D3: 0.4, D4: 0.6, D5: 0.8 },
+        schema: [
+          { level: 0, naam: "Geen risico", actie: "Geen DPIA nodig", range: "< 0.1" },
+          { level: 1, naam: "Verwaarloosbaar", actie: "Geen DPIA nodig", range: "0.1 – 0.2" },
+          { level: 2, naam: "Laag risico", actie: "DPIA aanbevolen", range: "0.2 – 0.4" },
+          { level: 3, naam: "Middel risico", actie: "DPIA vereist", range: "0.4 – 0.6" },
+          { level: 4, naam: "Hoog risico", actie: "DPIA verplicht (AVG art. 35)", range: "0.6 – 0.8" },
+          { level: 5, naam: "Kritisch risico", actie: "DPIA verplicht + DPO-overleg", range: ">= 0.8" },
+        ],
+      });
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }

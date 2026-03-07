@@ -23,7 +23,7 @@ import type {
   HypatiaResult,
   PhronesisResult,
 } from "./types";
-import { hypatiaRisk } from "../trace/hypatia";
+import { hypatiaRisk, classifyDpiaLevel, DPIA_LEVEL_LABELS } from "../trace/hypatia";
 import { phronesisCapacity } from "../trace/phronesis";
 
 export type { PipelineInput, PipelineResult, PipelineStep, ScopeClassification, OlympiaResolution } from "./types";
@@ -61,6 +61,8 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
       phronesis,
       finalDecision: "PASS",
       finalReason: "Lege invoer — doorgelaten zonder verdere verwerking.",
+      dpiaLevel: hypatia.dpiaLevel,
+      dpiaLabel: hypatia.dpiaLabel,
       processingMs: Date.now() - totalStart,
     };
   }
@@ -106,6 +108,8 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
     phronesis: castraOut.result.phronesis,
     finalDecision: taoGateResult.D_final,
     finalReason,
+    dpiaLevel: castraOut.result.hypatia.dpiaLevel,
+    dpiaLabel: castraOut.result.hypatia.dpiaLabel,
     processingMs: Date.now() - totalStart,
   };
 }
@@ -253,6 +257,11 @@ export async function gatewayClassify(opts: {
   const scopeUsedExternalData = resolvedScope && (resolvedScope.ingestMeta as any)?.model && (resolvedScope.ingestMeta as any).model !== "manual";
   const traceableRuleId = olympiaResult?.winningRule?.ruleId ?? null;
 
+  const hypatiaForGateway = hypatiaRisk(
+    Math.min(1.0, text.length / 200),
+    0.5,
+  );
+
   await storage.createIntent({
     orgId,
     scopeId: scopeId || null,
@@ -266,6 +275,7 @@ export async function gatewayClassify(opts: {
     escalation: implicitPressureOverride?.escalation || scopeResult?.escalation || gate.escalation,
     ruleId: traceableRuleId,
     processingMs,
+    dpiaLevel: hypatiaForGateway.dpiaLevel,
     lexiconSource: usedLlm ? "external" : (scopeUsedExternalData ? "external" : "internal"),
     lexiconDeterministic: usedLlm ? "false" : (scopeUsedExternalData ? "false" : "true"),
   });

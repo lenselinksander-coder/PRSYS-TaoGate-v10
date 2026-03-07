@@ -16,6 +16,41 @@ export const HYPATIA_THRESHOLDS = {
   T3: 0.7,  // ESCALATE boundary; above → BLOCK
 } as const;
 
+// DPIA-niveaudrempelwaarden (AVG art. 35)
+export const DPIA_THRESHOLDS = {
+  D1: 0.1,  // Verwaarloosbaar
+  D2: 0.2,  // Laag risico
+  D3: 0.4,  // Middel risico
+  D4: 0.6,  // Hoog risico
+  D5: 0.8,  // Kritisch risico
+} as const;
+
+/** DPIA-niveau 0–5 conform AVG artikel 35 */
+export type DpiaLevel = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const DPIA_LEVEL_LABELS: Record<DpiaLevel, string> = {
+  0: "Geen risico — geen DPIA nodig",
+  1: "Verwaarloosbaar — geen DPIA nodig",
+  2: "Laag risico — DPIA aanbevolen",
+  3: "Middel risico — DPIA vereist",
+  4: "Hoog risico — DPIA verplicht (AVG art. 35)",
+  5: "Kritisch risico — DPIA verplicht + DPO-overleg",
+};
+
+/**
+ * Classificeer het DPIA-niveau (0–5) op basis van de risicoscore.
+ * Onafhankelijk van de Hypatia gate-beslissing.
+ */
+export function classifyDpiaLevel(riskScore: number): DpiaLevel {
+  const r = Math.max(0, Math.min(1, riskScore));
+  if (r < DPIA_THRESHOLDS.D1) return 0;
+  if (r < DPIA_THRESHOLDS.D2) return 1;
+  if (r < DPIA_THRESHOLDS.D3) return 2;
+  if (r < DPIA_THRESHOLDS.D4) return 3;
+  if (r < DPIA_THRESHOLDS.D5) return 4;
+  return 5;
+}
+
 export type HypatiaDecision =
   | "PASS"
   | "PASS_WITH_TRANSPARENCY"
@@ -29,6 +64,8 @@ export type HypatiaResult = {
   decision: HypatiaDecision;
   thresholdLabel: string;
   reason: string;
+  dpiaLevel: DpiaLevel;
+  dpiaLabel: string;
 };
 
 /**
@@ -64,5 +101,8 @@ export function hypatiaRisk(impact: number, probability: number): HypatiaResult 
     reason = `Risico ${risk.toFixed(3)} is kritiek — geblokkeerd (Cerberus).`;
   }
 
-  return { impact: clampedImpact, probability: clampedProb, risk, decision, thresholdLabel, reason };
+  const dpiaLevel = classifyDpiaLevel(risk);
+  const dpiaLabel = DPIA_LEVEL_LABELS[dpiaLevel];
+
+  return { impact: clampedImpact, probability: clampedProb, risk, decision, thresholdLabel, reason, dpiaLevel, dpiaLabel };
 }

@@ -1,10 +1,10 @@
 import type { GateProfile, GateDecision, Scope, ScopeRule, RuleLayer } from "@shared/schema";
-import type { HypatiaResult } from "../trace/hypatia";
+import type { HypatiaResult, DpiaLevel } from "../trace/hypatia";
 import type { PhronesisResult } from "../trace/phronesis";
 import type { GateResult } from "../gateSystem";
 
 export type { GateResult } from "../gateSystem";
-export type { HypatiaResult } from "../trace/hypatia";
+export type { HypatiaResult, DpiaLevel } from "../trace/hypatia";
 export type { PhronesisResult } from "../trace/phronesis";
 
 export const DECISION_ORDER = ["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"] as const;
@@ -74,6 +74,8 @@ export type PipelineResult = {
   phronesis: PhronesisResult;
   finalDecision: string;
   finalReason: string;
+  dpiaLevel: DpiaLevel;
+  dpiaLabel: string;
   processingMs: number;
 };
 
