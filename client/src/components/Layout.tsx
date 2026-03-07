@@ -123,7 +123,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-black/97 backdrop-blur-sm lg:hidden pt-20 px-6 border border-primary/20">
+        <div className="fixed inset-0 z-40 bg-black/97 backdrop-blur-sm lg:hidden pt-20 px-6 pb-8 border border-primary/20 overflow-y-auto">
           <nav className="flex flex-col gap-2">
             {navItems.map((item) => (
               <Link
