@@ -19,7 +19,7 @@
 // Fail-safe axiom (Lex Tabularium): error ⇒ BLOCK
 
 import { runGate } from "../gateSystem";
-import { hypatiaRisk, type HypatiaResult } from "./hypatia";
+import { hypatiaRisk, classifyDpiaLevel, DPIA_LEVEL_LABELS, type HypatiaResult, type DpiaLevel } from "./hypatia";
 import { phronesisCapacity, type PhronesisResult } from "./phronesis";
 import type { GateProfile } from "@shared/schema";
 import { randomUUID } from "crypto";
@@ -79,6 +79,8 @@ export type TraceResult = {
   phronesis: PhronesisResult;
   finalDecision: string;
   finalReason: string;
+  dpiaLevel: DpiaLevel;
+  dpiaLabel: string;
   processingMs: number;
 };
 
@@ -303,6 +305,8 @@ export async function runTrace(opts: TraceInput): Promise<TraceResult> {
     phronesis,
     finalDecision: D_final,
     finalReason,
+    dpiaLevel: hypatia.dpiaLevel,
+    dpiaLabel: hypatia.dpiaLabel,
     processingMs: Date.now() - totalStart,
   };
 }
@@ -330,6 +334,8 @@ function buildPassResult(
     phronesis,
     finalDecision: "PASS",
     finalReason: "Lege invoer — doorgelaten zonder verdere verwerking.",
+    dpiaLevel: hypatia.dpiaLevel,
+    dpiaLabel: hypatia.dpiaLabel,
     processingMs: Date.now() - totalStart,
   };
 }

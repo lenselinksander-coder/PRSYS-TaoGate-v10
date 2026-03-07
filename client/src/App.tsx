@@ -12,6 +12,7 @@ import IngestPage from "./pages/IngestPage";
 import ScopesPage from "./pages/ScopesPage";
 import TriagePage from "./TriagePage";
 import CastraPage from "./pages/CastraPage";
+import GlazenBastionPage from "./pages/GlazenBastionPage";
 
 function AdminRoutes() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<CVIPage />} />
+      <Route path="/glazen-bastion" element={<GlazenBastionPage />} />
       <Route path="/admin/*" element={<AdminRoutes />} />
     </Routes>
   );

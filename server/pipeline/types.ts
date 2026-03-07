@@ -1,11 +1,13 @@
 import type { GateProfile, GateDecision, Scope, ScopeRule, RuleLayer } from "@shared/schema";
-import type { HypatiaResult } from "../trace/hypatia";
+import type { HypatiaResult, DpiaLevel } from "../trace/hypatia";
 import type { PhronesisResult } from "../trace/phronesis";
 import type { GateResult } from "../gateSystem";
+import type { VectorEvaluation } from "../vector_engine";
 
 export type { GateResult } from "../gateSystem";
-export type { HypatiaResult } from "../trace/hypatia";
+export type { HypatiaResult, DpiaLevel } from "../trace/hypatia";
 export type { PhronesisResult } from "../trace/phronesis";
+export type { VectorEvaluation } from "../vector_engine";
 
 export const DECISION_ORDER = ["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"] as const;
 export type LatticeDecision = typeof DECISION_ORDER[number];
@@ -72,8 +74,12 @@ export type PipelineResult = {
   lattice: PipelineLattice;
   hypatia: HypatiaResult;
   phronesis: PhronesisResult;
+  /** Vector Legitimacy Engine evaluatie — null bij vroege pipeline-afbreking (lege invoer) */
+  vector: VectorEvaluation | null;
   finalDecision: string;
   finalReason: string;
+  dpiaLevel: DpiaLevel;
+  dpiaLabel: string;
   processingMs: number;
 };
 
