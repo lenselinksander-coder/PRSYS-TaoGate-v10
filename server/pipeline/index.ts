@@ -13,6 +13,8 @@ import { runAudit } from "./audit";
 import { evaluateImplicitPressure, routeImplicitPressure, taoGateSchema } from "./clinical";
 import { orchestrateGate } from "../fsm/gateOrchestrator";
 import { cerberusEnforce, normaliseDecision, latticeMax } from "./types";
+import { evaluateVector } from "../vector_engine";
+import type { VectorEvaluation, VectorDecision } from "../vector_engine";
 import type {
   PipelineInput,
   PipelineResult,
@@ -30,6 +32,39 @@ export type { PipelineInput, PipelineResult, PipelineStep, ScopeClassification, 
 export { classifyWithScope } from "./logos";
 export { resolveOlympiaRules, preflightCheck, runCerberus } from "./olympia";
 export { cerberusEnforce } from "./types";
+
+// ── Vector Legitimacy Engine — hulpfuncties ───────────────────────────────────
+
+/**
+ * Vertaalt een gate-beslissingsstatus naar een mandate-waarde [0..1].
+ * Hoge mandate = hoge governance-bevoegdheid voor de actie.
+ */
+function gateStatusToMandate(status: string): number {
+  switch (status) {
+    case "PASS":                  return 1.0;
+    case "PASS_WITH_TRANSPARENCY": return 0.75;
+    case "ESCALATE_HUMAN":        return 0.3;
+    case "ESCALATE_REGULATORY":   return 0.2;
+    case "BLOCK":                 return 0.0;
+    default:                      return 0.0;
+  }
+}
+
+/**
+ * Vertaalt een VectorDecision naar een pipeline-lattice beslissing.
+ * GO      → "PASS"           (geen extra restrictie)
+ * HOLD    → "ESCALATE_HUMAN" (menselijke review vereist)
+ * NO_GO   → "BLOCK"          (uitvoering geblokkeerd)
+ */
+function vectorDecisionToLattice(d: VectorDecision): string {
+  switch (d) {
+    case "GO":    return "PASS";
+    case "HOLD":  return "ESCALATE_HUMAN";
+    case "NO_GO": return "BLOCK";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> {
   const totalStart = Date.now();
@@ -59,6 +94,7 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
       lattice: { D_gate: "PASS", D_scope: "PASS", D_runtime: "PASS", D_final: "PASS" },
       hypatia,
       phronesis,
+      vector: null,
       finalDecision: "PASS",
       finalReason: "Lege invoer — doorgelaten zonder verdere verwerking.",
       dpiaLevel: hypatia.dpiaLevel,
@@ -83,10 +119,45 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
   const D_scope = cerberusBlocked ? "BLOCK" as string : normaliseDecision(castraOut.result.hypatia.decision);
   const D_runtime = cerberusBlocked ? "BLOCK" as string : (castraOut.result.phronesis.decision === "ESCALATE" ? "ESCALATE_HUMAN" : "PASS");
 
-  const valkyrieResult = runValkyrie(D_gate, D_scope, D_runtime, gate.escalation);
+  // ── Vector Legitimacy Engine ────────────────────────────────────────────────
+  // Leid de drie governance-dimensies af uit bestaande pipeline-uitkomsten.
+  // Cerberus-garantie: een berekeningsfout levert HOLD op (conservatief),
+  // nooit een onafgehandelde uitzondering.
+  const vectorMandate   = gateStatusToMandate(gate.status);
+  const vectorIntegrity = Math.max(0, 1 - castraOut.result.hypatia.risk);
+  const vectorLoad      = Math.min(1, Math.max(0, castraOut.result.phronesis.SI));
+
+  let vectorEval: VectorEvaluation | null = null;
+  try {
+    vectorEval = evaluateVector({ mandate: vectorMandate, integrity: vectorIntegrity, load: vectorLoad });
+  } catch {
+    // Berekeningsfout → conservatief HOLD; pipeline gaat door
+    vectorEval = null;
+  }
+
+  const D_vector = vectorDecisionToLattice(vectorEval?.decision ?? "HOLD");
+  // D_vector weegt mee als vierde lattice-dimensie via D_runtime
+  const D_runtime_final = latticeMax(D_runtime, D_vector);
+
+  const vectorStepT = Date.now();
+  steps.push({
+    name: "Vector",
+    symbol: "⟨V⟩",
+    role: "Vector Legitimacy Engine — stabiliteitsanalyse (mandate × integrity × load)",
+    decision: vectorEval?.decision ?? "HOLD",
+    detail: vectorEval
+      ? `stability=${vectorEval.stability.toFixed(3)} | legitimacy=${vectorEval.legitimacyScore.toFixed(3)} | ` +
+        `risk=${vectorEval.risk.toFixed(3)} | mandate=${vectorMandate.toFixed(2)}, ` +
+        `integrity=${vectorIntegrity.toFixed(2)}, load=${vectorLoad.toFixed(2)} → ${vectorEval.decision}`
+      : `Vector engine fout — HOLD als Cerberus-fallback (D_runtime_final=${D_runtime_final})`,
+    durationMs: Date.now() - vectorStepT,
+  });
+  // ── Einde Vector Legitimacy Engine ─────────────────────────────────────────
+
+  const valkyrieResult = runValkyrie(D_gate, D_scope, D_runtime_final, gate.escalation);
   steps.push(valkyrieResult.step);
 
-  const taoGateResult = runTaoGate(D_gate, D_scope, D_runtime, gate.escalation);
+  const taoGateResult = runTaoGate(D_gate, D_scope, D_runtime_final, gate.escalation);
   steps.push(...taoGateResult.steps);
 
   const auditStep = runAudit(auditId, taoGateResult.D_final);
@@ -101,11 +172,12 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
     lattice: {
       D_gate,
       D_scope,
-      D_runtime,
+      D_runtime: D_runtime_final,
       D_final: taoGateResult.D_final,
     },
     hypatia: castraOut.result.hypatia,
     phronesis: castraOut.result.phronesis,
+    vector: vectorEval,
     finalDecision: taoGateResult.D_final,
     finalReason,
     dpiaLevel: castraOut.result.hypatia.dpiaLevel,
