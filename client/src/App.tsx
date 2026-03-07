@@ -12,6 +12,8 @@ import IngestPage from "./pages/IngestPage";
 import ScopesPage from "./pages/ScopesPage";
 import TriagePage from "./TriagePage";
 import CastraPage from "./pages/CastraPage";
+import VectorPage from "./pages/VectorPage";
+import AlgoritmeregisterPage from "./pages/AlgoritmeregisterPage";
 import GlazenBastionPage from "./pages/GlazenBastionPage";
 
 function AdminRoutes() {
@@ -27,6 +29,8 @@ function AdminRoutes() {
         <Route path="import" element={<ImportPage />} />
         <Route path="gateway-logs" element={<GatewayLogsPage />} />
         <Route path="olympia" element={<OlympiaPage />} />
+        <Route path="vector" element={<VectorPage />} />
+        <Route path="algoritmeregister" element={<AlgoritmeregisterPage />} />
         <Route path="ingest" element={<IngestPage />} />
       </Routes>
     </AdminLayout>

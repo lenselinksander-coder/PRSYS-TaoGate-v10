@@ -28,6 +28,8 @@ ORFHEUSS is built as a multi-tenant application with a clear separation of conce
 - **UI Components**: shadcn/ui (new-york style) built on Radix UI primitives.
 - **Icons**: Lucide React.
 - **Build Tool**: Vite, with path aliases for improved development experience.
+- **Admin Pages**: Dashboard, Organisaties, ARGOS (Triage), Scopes, Castra, Import, Connectors, OLYMPIA, Vectoren (Vector Engine), Register (Algoritmeregister), Gateway Logs, Ingest.
+- **Public Pages**: CVI (landing), Glazen Bastion (burgerportaal).
 - The UI language is predominantly **Dutch**.
 
 ### Backend
