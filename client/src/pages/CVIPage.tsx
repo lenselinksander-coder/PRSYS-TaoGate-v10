@@ -29,6 +29,69 @@ type ClassifyResponse = {
   onderbouwing?: string | null;
 };
 
+function computeOversight(result: ClassifyResponse, scopeOrgName?: string | null) {
+  const oversightRequired = ["ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"].includes(result.status);
+  const responsibleActor = scopeOrgName ?? "BIG-geregistreerde arts";
+  const clinicalRisk = (() => {
+    if (result.status === "BLOCK" && String(result.pressure) === "CRITICAL") return "KRITISCH";
+    if (result.status === "BLOCK" || result.status === "ESCALATE_REGULATORY") return "HOOG";
+    if (result.status === "ESCALATE_HUMAN") return "MIDDEL";
+    return "LAAG";
+  })();
+  const aiReliability = ({ PASS: 95, PASS_WITH_TRANSPARENCY: 88, ESCALATE_HUMAN: 72, ESCALATE_REGULATORY: 65, BLOCK: 82 } as Record<string, number>)[result.status] ?? 75;
+  return { oversightRequired, responsibleActor, clinicalRisk, aiReliability };
+}
+
+function OversightBanner({ oversight }: { oversight: ReturnType<typeof computeOversight> }) {
+  const { oversightRequired, responsibleActor, clinicalRisk, aiReliability } = oversight;
+  const riskColor = { LAAG: "#86efac", MIDDEL: "#fbbf24", HOOG: "#f87171", KRITISCH: "#ef4444" }[clinicalRisk] ?? "#e9f3f8";
+  const borderColor = oversightRequired ? "rgba(251,191,36,0.35)" : "rgba(96,165,250,0.2)";
+  const bg = oversightRequired ? "rgba(120,80,0,0.10)" : "rgba(30,60,100,0.10)";
+
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: "10px 14px",
+        borderRadius: 10,
+        border: `1px solid ${borderColor}`,
+        background: bg,
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 11,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "10px 20px",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Human Oversight</span>
+        <span style={{ fontWeight: 700, color: oversightRequired ? "#fbbf24" : "#86efac", letterSpacing: "0.06em" }}>
+          {oversightRequired ? "VEREIST" : "NIET VEREIST"}
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Responsible Actor</span>
+        <span style={{ fontWeight: 600, color: "#c4dff6" }}>{responsibleActor}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Clinical Risk</span>
+        <span style={{ fontWeight: 700, color: riskColor }}>{clinicalRisk}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>AI Reliability</span>
+        <span style={{ fontWeight: 700, color: aiReliability >= 88 ? "#86efac" : aiReliability >= 72 ? "#fbbf24" : "#f87171" }}>{aiReliability}%</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Human Review</span>
+        <span style={{ fontWeight: 700, color: oversightRequired ? "#fbbf24" : "#86efac" }}>
+          {oversightRequired ? "REQUIRED" : "NOT REQUIRED"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function badgeTone(decision: GateDecision) {
   switch (decision) {
     case "BLOCK":
@@ -292,8 +355,10 @@ export default function CVIPage() {
           >
             {(() => {
               const tone = badgeTone(result.status);
+              const selectedScope = scopes.find(s => s.id === selectedScopeId);
               return (
                 <>
+                  <OversightBanner oversight={computeOversight(result, selectedScope?.orgName)} />
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <span
