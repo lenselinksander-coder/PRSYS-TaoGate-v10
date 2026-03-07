@@ -205,9 +205,11 @@ export async function gatewayClassify(opts: {
   orgId: string;
   connectorId: string;
   scopeId?: string;
+  subjectRef?: string;
+  subjectRefType?: string;
 }): Promise<any> {
   const start = Date.now();
-  const { text, orgId, connectorId, scopeId } = opts;
+  const { text, orgId, connectorId, scopeId, subjectRef, subjectRefType } = opts;
 
   const org = await storage.getOrganization(orgId);
   if (!org) throw new Error("Organisatie niet gevonden");
@@ -278,6 +280,8 @@ export async function gatewayClassify(opts: {
     dpiaLevel: hypatiaForGateway.dpiaLevel,
     lexiconSource: usedLlm ? "external" : (scopeUsedExternalData ? "external" : "internal"),
     lexiconDeterministic: usedLlm ? "false" : (scopeUsedExternalData ? "false" : "true"),
+    subjectRef: subjectRef ?? null,
+    subjectRefType: subjectRefType ?? null,
   });
 
   if (implicitPressureOverride) {

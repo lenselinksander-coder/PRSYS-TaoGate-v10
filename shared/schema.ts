@@ -196,6 +196,8 @@ export const intents = pgTable("intents", {
   dpiaLevel: integer("dpia_level"),
   lexiconSource: text("lexicon_source").notNull().default("internal"),
   lexiconDeterministic: text("lexicon_deterministic").notNull().default("true"),
+  subjectRef: varchar("subject_ref"),
+  subjectRefType: varchar("subject_ref_type"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
