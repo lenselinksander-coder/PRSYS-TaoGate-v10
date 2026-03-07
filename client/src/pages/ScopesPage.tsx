@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, FileText, Tag, Trash2, Save, ChevronDown, ChevronRight, Edit2, Shield, CheckCircle, BookOpen, ScrollText, Scale, FolderOpen, AlertTriangle, Info, Building2 } from "lucide-react";
+import { Layers, Plus, FileText, Tag, Trash2, Save, ChevronDown, ChevronRight, Edit2, Shield, CheckCircle, BookOpen, ScrollText, Scale, FolderOpen, AlertTriangle, Info, Building2, Lock, LockOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -469,6 +469,14 @@ function ScopeCard({ scope, onEdit, orgName, orgs }: { scope: Scope; onEdit: (sc
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scopes"] }),
   });
 
+  const lockMutation = useMutation({
+    mutationFn: async () => {
+      const newStatus = scope.status === "LOCKED" ? "DRAFT" : "LOCKED";
+      return updateScope(scope.id, { status: newStatus });
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scopes"] }),
+  });
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -500,6 +508,16 @@ function ScopeCard({ scope, onEdit, orgName, orgs }: { scope: Scope; onEdit: (sc
               )}
             </div>
             <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-8 w-8 ${scope.status === "LOCKED" ? "text-green-400 hover:text-yellow-400" : "text-muted-foreground hover:text-green-400"}`}
+                onClick={() => lockMutation.mutate()}
+                title={scope.status === "LOCKED" ? "Ontgrendelen" : "Vergrendelen"}
+                data-testid={`button-lock-scope-${scope.id}`}
+              >
+                {scope.status === "LOCKED" ? <Lock className="w-3.5 h-3.5" /> : <LockOpen className="w-3.5 h-3.5" />}
+              </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(scope)} data-testid={`button-edit-scope-${scope.id}`}>
                 <Edit2 className="w-3.5 h-3.5" />
               </Button>
