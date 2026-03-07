@@ -17,6 +17,7 @@ import {
 } from "./pipeline";
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
 import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace/hypatia";
+import { testudoStatus } from "./middleware/testudo";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -663,6 +664,7 @@ export async function registerRoutes(
       organizations: orgs.length, scopes: allScopes.length, connectors: allConnectors.length, intents: intentStats,
       gateProfiles: ["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"],
       sectors: ["healthcare", "finance", "education", "government", "technology", "legal", "energy", "transport", "retail", "manufacturing", "other"],
+      testudo: testudoStatus(),
     });
   });
 

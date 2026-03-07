@@ -6,9 +6,12 @@ import { seedDefaultScopes } from "./seed";
 import { initWormChain } from "./audit/wormChain";
 import { bootstrapTapeDeck } from "./core/init";
 import { bootstrapTRST } from "./core/trst";
+import { testudoShield, testudoContentLengthGuard } from "./middleware/testudo";
 
 const app = express();
 const httpServer = createServer(app);
+
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -16,16 +19,20 @@ declare module "http" {
   }
 }
 
+app.use(testudoContentLengthGuard());
+
 app.use(
   express.json({
-    limit: "20mb",
+    limit: "2mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+
+app.use(testudoShield());
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

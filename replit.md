@@ -32,6 +32,14 @@ ORFHEUSS is built as a multi-tenant application with a clear separation of conce
 - **Public Pages**: CVI (landing), Glazen Bastion (burgerportaal).
 - The UI language is predominantly **Dutch**.
 
+### Testudo (server/middleware/testudo.ts)
+Defensive shield layer protecting TaoGate. Handles validation, rate limits, auth guards and abuse protection. All API requests pass through Testudo before reaching the pipeline.
+- **Rate Limiting**: Per-client (IP or API key) with separate limits for gateway (60/min) and general API (120/min).
+- **Input Validation**: Deep recursive scanning for XSS, SQL injection, path traversal, template injection.
+- **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy.
+- **Abuse Protection**: Body size limits, nesting depth limits, oversized input blocking.
+- **Status**: Exposed via `/api/system/info` → `testudo` field.
+
 ### Backend
 - **Runtime**: Node.js with Express 5.
 - **Language**: TypeScript, executed via `tsx`.
