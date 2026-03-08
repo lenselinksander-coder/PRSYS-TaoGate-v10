@@ -97,5 +97,4 @@ The governance kernel can be validated at any time by running the system check:
 python -m tao_gate.system_check
 ```
 
-This executes 17 independent checks across all governance layers and reports overall health. Exit code is 0 on success, 1 on failure.
-
+This executes 20 independent checks across all governance layers and reports overall health, including architecture-boundary checks for documentation, public subsystem indexes, and cross-subsystem imports. Exit code is 0 on success, 1 on failure.

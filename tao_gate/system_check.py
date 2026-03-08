@@ -24,7 +24,10 @@ Layers verified
  14. Valkyrie UX      — all-clear context returns OK.
  15. User exposure    — PASS + OK + OK → PASS.
  16. Exposure firewall — Valkyries cannot relax BLOCK.
- 17. explain_decision — all required audit keys present.
+  17. explain_decision — all required audit keys present.
+  18. Architecture docs — layer and flow documents are present.
+  19. Public API indexes — boundary index.ts files exist for server subsystems.
+  20. Import boundaries — cross-subsystem imports go through public indexes.
 
 Invoke as a CLI script:
     python -m tao_gate.system_check
@@ -35,6 +38,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 from typing import Callable
 
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
@@ -112,6 +117,119 @@ def _run_check(
             status="FAIL",
             detail=f"Unexpected exception during check: {exc}",
         )
+
+
+def _read_text(path: Path) -> str:
+    """Read *path* as UTF-8 text."""
+    return path.read_text(encoding="utf-8")
+
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_SERVER_PUBLIC_SUBSYSTEMS = (
+    "core",
+    "pipeline",
+    "fsm",
+    "trace",
+    "vector_engine",
+    "middleware",
+)
+_ARCHITECTURE_DOC_ANCHORS = {
+    _REPO_ROOT / "ARCHITECTURE.md": ("Dependency Direction", "Dependency Rules"),
+    _REPO_ROOT / "docs" / "system_architecture.md": ("Full Stack", "Discrete Modes"),
+}
+_IMPORT_FROM_RE = re.compile(r'\bfrom\s+["\']([^"\']+)["\']')
+
+
+def _server_subsystem(rel_path: Path) -> str | None:
+    """Return the server subsystem for a repository-relative path."""
+    parts = rel_path.parts
+    if len(parts) >= 2 and parts[0] == "server" and parts[1] in _SERVER_PUBLIC_SUBSYSTEMS:
+        return parts[1]
+    return None
+
+
+def _architecture_doc_gaps() -> tuple[list[str], list[str]]:
+    """Return missing architecture files and missing anchor headings."""
+    missing_files: list[str] = []
+    missing_anchors: list[str] = []
+
+    for path, anchors in _ARCHITECTURE_DOC_ANCHORS.items():
+        if not path.exists():
+            missing_files.append(path.relative_to(_REPO_ROOT).as_posix())
+            continue
+
+        text = _read_text(path)
+        for anchor in anchors:
+            if anchor not in text:
+                missing_anchors.append(
+                    f"{path.relative_to(_REPO_ROOT).as_posix()}::{anchor}"
+                )
+
+    return missing_files, missing_anchors
+
+
+def _missing_public_indexes() -> list[str]:
+    """Return missing public index.ts files for server subsystems."""
+    missing: list[str] = []
+
+    for subsystem in _SERVER_PUBLIC_SUBSYSTEMS:
+        index_path = _REPO_ROOT / "server" / subsystem / "index.ts"
+        if not index_path.exists():
+            missing.append(index_path.relative_to(_REPO_ROOT).as_posix())
+
+    return missing
+
+
+def _cross_subsystem_internal_import_violations() -> list[str]:
+    """
+    Find cross-subsystem imports that bypass a public index file.
+
+    The rule is intentionally simple: files may import another subsystem through
+    ``server/<subsystem>`` or ``server/<subsystem>/index``, but not through
+    internal files such as ``server/trace/hypatia``.
+    """
+    violations: list[str] = []
+
+    for path in _REPO_ROOT.rglob("*.ts"):
+        rel_path = path.relative_to(_REPO_ROOT)
+        rel_posix = rel_path.as_posix()
+        if (
+            "node_modules" in rel_path.parts
+            or "dist" in rel_path.parts
+            or path.name == "index.ts"
+            or "__tests__" in rel_path.parts
+            or rel_posix.endswith(".test.ts")
+            or rel_posix.endswith(".spec.ts")
+        ):
+            continue
+
+        current_subsystem = _server_subsystem(rel_path)
+        if current_subsystem is None:
+            continue
+
+        for specifier in _IMPORT_FROM_RE.findall(_read_text(path)):
+            if not specifier.startswith("."):
+                continue
+
+            target = (path.parent / specifier).resolve(strict=False)
+            try:
+                target_rel = target.relative_to(_REPO_ROOT)
+            except ValueError:
+                continue
+
+            target_subsystem = _server_subsystem(target_rel)
+            if target_subsystem is None or target_subsystem == current_subsystem:
+                continue
+
+            if len(target_rel.parts) <= 2:
+                continue
+
+            if len(target_rel.parts) == 3 and Path(target_rel.parts[2]).stem == "index":
+                continue
+
+            violations.append(f"{rel_posix} -> {specifier}")
+
+    return violations
 
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -339,6 +457,50 @@ def run_system_check() -> SystemCheckReport:
         fn=_explain_keys_ok,
         detail_ok=f"explain_decision returns all required keys: {sorted(_REQUIRED_KEYS)}.",
         detail_fail="explain_decision is missing one or more required audit keys.",
+    ))
+
+    # ── 18. Architecture docs are present and structured ──────────────────────
+    _missing_arch_files, _missing_arch_anchors = _architecture_doc_gaps()
+    checks.append(_run_check(
+        name="Architecture docs: layer and flow documents present",
+        fn=lambda: not _missing_arch_files and not _missing_arch_anchors,
+        detail_ok=(
+            "Architecture docs present: ARCHITECTURE.md and docs/system_architecture.md "
+            "contain the expected section anchors."
+        ),
+        detail_fail=(
+            "Architecture docs incomplete: "
+            f"missing files={_missing_arch_files or 'none'}, "
+            f"missing anchors={_missing_arch_anchors or 'none'}."
+        ),
+    ))
+
+    # ── 19. Public server subsystem indexes exist ─────────────────────────────
+    _missing_indexes = _missing_public_indexes()
+    checks.append(_run_check(
+        name="Architecture indexes: public server APIs exported via index.ts",
+        fn=lambda: not _missing_indexes,
+        detail_ok=(
+            "All public server subsystem indexes exist: "
+            + ", ".join(f"server/{name}/index.ts" for name in _SERVER_PUBLIC_SUBSYSTEMS)
+            + "."
+        ),
+        detail_fail=f"Missing public subsystem indexes: {_missing_indexes}.",
+    ))
+
+    # ── 20. Cross-subsystem imports respect public boundaries ─────────────────
+    _import_boundary_violations = _cross_subsystem_internal_import_violations()
+    checks.append(_run_check(
+        name="Architecture imports: cross-subsystem imports use public indexes",
+        fn=lambda: not _import_boundary_violations,
+        detail_ok=(
+            "No cross-subsystem internal imports were found; TypeScript layers respect "
+            "their public index boundaries."
+        ),
+        detail_fail=(
+            "Found cross-subsystem imports that bypass public indexes: "
+            f"{_import_boundary_violations}."
+        ),
     ))
 
     # ── Aggregate ─────────────────────────────────────────────────────────────
