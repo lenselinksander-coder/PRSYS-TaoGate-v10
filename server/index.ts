@@ -72,6 +72,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { dbReady } = await import("./db");
+  await dbReady;
+
   await registerRoutes(httpServer, app);
   await seedDefaultScopes();
   await initWormChain();
