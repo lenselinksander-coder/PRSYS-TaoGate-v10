@@ -4,8 +4,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, insertScopeSchema, insertOrganizationSchema, gateProfiles } from "@shared/schema";
-import { getTapeDeck } from "./core/init";
-import { executeTaoGate } from "./core/trst";
+import { getTapeDeck, executeTaoGate, runEuLegalGate, formatEuBlockAsGateResponse, EU_BASELINE_SCOPE } from "./core";
 import { researchTopic, extractScopeFromResearch } from "./perplexity";
 import { repairPdfJson, extractJsonObject, structurePdfText } from "./services/pdfParser";
 import {
@@ -16,10 +15,8 @@ import {
   preflightCheck,
 } from "./pipeline";
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
-import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace/hypatia";
-import { testudoStatus } from "./middleware/testudo";
-import { runEuLegalGate, formatEuBlockAsGateResponse } from "./core/euLegalGate";
-import { EU_BASELINE_SCOPE } from "./core/euBaseline";
+import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace";
+import { testudoStatus } from "./middleware";
 
 export async function registerRoutes(
   httpServer: Server,
