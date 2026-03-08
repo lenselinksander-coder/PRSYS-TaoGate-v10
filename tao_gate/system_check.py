@@ -24,9 +24,9 @@ Layers verified
  14. Valkyrie UX      — all-clear context returns OK.
  15. User exposure    — PASS + OK + OK → PASS.
  16. Exposure firewall — Valkyries cannot relax BLOCK.
-  17. explain_decision — all required audit keys present.
+  17. explain_decision  — all required audit keys present.
   18. Architecture docs — layer and flow documents are present.
-  19. Public API indexes — boundary index.ts files exist for server subsystems.
+  19. Public API indexes — public index.ts files exist for server subsystems.
   20. Import boundaries — cross-subsystem imports go through public indexes.
 
 Invoke as a CLI script:
@@ -137,7 +137,8 @@ _ARCHITECTURE_DOC_ANCHORS = {
     _REPO_ROOT / "ARCHITECTURE.md": ("Dependency Direction", "Dependency Rules"),
     _REPO_ROOT / "docs" / "system_architecture.md": ("Full Stack", "Discrete Modes"),
 }
-_IMPORT_FROM_RE = re.compile(r'\bfrom\s+["\']([^"\']+)["\']')
+_IMPORT_FROM_RE = re.compile(r'from\s+["\']([^"\']+)["\']')
+_PUBLIC_INDEX_PATH_DEPTH = 3
 
 
 def _server_subsystem(rel_path: Path) -> str | None:
@@ -211,7 +212,16 @@ def _cross_subsystem_internal_import_violations() -> list[str]:
             if not specifier.startswith("."):
                 continue
 
-            target = (path.parent / specifier).resolve(strict=False)
+            raw_target = (path.parent / specifier).resolve(strict=False)
+            candidates = (
+                raw_target,
+                raw_target.with_suffix(".ts"),
+                raw_target.with_suffix(".tsx"),
+                raw_target / "index.ts",
+                raw_target / "index.tsx",
+            )
+            target = next((candidate for candidate in candidates if candidate.exists()), raw_target)
+
             try:
                 target_rel = target.relative_to(_REPO_ROOT)
             except ValueError:
@@ -224,7 +234,11 @@ def _cross_subsystem_internal_import_violations() -> list[str]:
             if len(target_rel.parts) <= 2:
                 continue
 
-            if len(target_rel.parts) == 3 and Path(target_rel.parts[2]).stem == "index":
+            # Allow imports that resolve to server/<subsystem>/index.ts(x).
+            if (
+                len(target_rel.parts) == _PUBLIC_INDEX_PATH_DEPTH
+                and target_rel.parts[2].removesuffix(".ts").removesuffix(".tsx") == "index"
+            ):
                 continue
 
             violations.append(f"{rel_posix} -> {specifier}")
