@@ -30,15 +30,16 @@ type ClassifyResponse = {
 };
 
 function computeOversight(result: ClassifyResponse, scopeOrgName?: string | null) {
-  const oversightRequired = ["ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"].includes(result.status);
+  const effectiveDecision = result.escalation ?? result.status;
+  const oversightRequired = ["ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"].includes(effectiveDecision);
   const responsibleActor = scopeOrgName ?? "BIG-geregistreerde arts";
   const clinicalRisk = (() => {
-    if (result.status === "BLOCK" && String(result.pressure) === "CRITICAL") return "KRITISCH";
-    if (result.status === "BLOCK" || result.status === "ESCALATE_REGULATORY") return "HOOG";
-    if (result.status === "ESCALATE_HUMAN") return "MIDDEL";
+    if (effectiveDecision === "BLOCK" && String(result.pressure) === "CRITICAL") return "KRITISCH";
+    if (effectiveDecision === "BLOCK" || effectiveDecision === "ESCALATE_REGULATORY") return "HOOG";
+    if (effectiveDecision === "ESCALATE_HUMAN") return "MIDDEL";
     return "LAAG";
   })();
-  const aiReliability = ({ PASS: 95, PASS_WITH_TRANSPARENCY: 88, ESCALATE_HUMAN: 72, ESCALATE_REGULATORY: 65, BLOCK: 82 } as Record<string, number>)[result.status] ?? 75;
+  const aiReliability = ({ PASS: 95, PASS_WITH_TRANSPARENCY: 88, ESCALATE_HUMAN: 72, ESCALATE_REGULATORY: 65, BLOCK: 82 } as Record<string, number>)[effectiveDecision] ?? 75;
   return { oversightRequired, responsibleActor, clinicalRisk, aiReliability };
 }
 
