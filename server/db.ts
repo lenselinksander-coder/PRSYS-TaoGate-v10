@@ -12,5 +12,8 @@ export const db = drizzle(pool, { schema });
 (async () => {
   try {
     await db.execute(sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS active_scope_id varchar`);
+    await db.execute(sql`ALTER TABLE intents ADD COLUMN IF NOT EXISTS dpia_level INTEGER`);
+    await db.execute(sql`ALTER TABLE intents ADD COLUMN IF NOT EXISTS subject_ref VARCHAR`);
+    await db.execute(sql`ALTER TABLE intents ADD COLUMN IF NOT EXISTS subject_ref_type VARCHAR`);
   } catch {}
 })();
