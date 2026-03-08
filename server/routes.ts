@@ -18,6 +18,8 @@ import {
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
 import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace/hypatia";
 import { testudoStatus } from "./middleware/testudo";
+import { runEuLegalGate, formatEuBlockAsGateResponse } from "./core/euLegalGate";
+import { EU_BASELINE_SCOPE } from "./core/euBaseline";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -29,6 +31,13 @@ export async function registerRoutes(
       const { text, scopeId, tapeId } = req.body as { text?: string; scopeId?: string; tapeId?: string };
       if (!text) return res.status(400).json({ error: "text required" });
       if (!scopeId && !tapeId) return res.status(400).json({ error: "scopeId or tapeId required" });
+
+      // ── EU LEGAL GATE — EERSTE STAP, ALTIJD ──────────────────────────────
+      const euResult = runEuLegalGate(text);
+      if (euResult.triggered) {
+        return res.json(formatEuBlockAsGateResponse(euResult, text));
+      }
+      // ── LEGAL BASIS CLEAR ─────────────────────────────────────────────────
 
       const tapeDeck = getTapeDeck();
       if (!tapeDeck || tapeDeck.tapes.size === 0) {
@@ -283,6 +292,12 @@ export async function registerRoutes(
         subjectRef = crypto.createHash("sha256").update(parsed.data.subjectBsn.trim()).digest("hex");
         subjectRefType = "BSN";
       }
+      // ── EU LEGAL GATE — EERSTE STAP, ALTIJD ──────────────────────────────
+      const euResult = runEuLegalGate(parsed.data.text);
+      if (euResult.triggered) {
+        return res.json(formatEuBlockAsGateResponse(euResult, parsed.data.text));
+      }
+      // ── LEGAL BASIS CLEAR ─────────────────────────────────────────────────
       const result = await gatewayClassify({
         text: parsed.data.text,
         orgId: connector.orgId,
@@ -646,6 +661,13 @@ export async function registerRoutes(
     const parsed = traceSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
+      // ── EU LEGAL GATE — EERSTE STAP, ALTIJD ──────────────────────────────
+      // E = Audit(Sandbox(TaoGate(LEGAL_EU2(GLE(Generatio(I))))))
+      const euResult = runEuLegalGate(parsed.data.input);
+      if (euResult.triggered) {
+        return res.json(formatEuBlockAsGateResponse(euResult, parsed.data.input));
+      }
+      // ── LEGAL BASIS CLEAR: door naar pipeline ─────────────────────────────
       return res.json(await runPipeline(parsed.data));
     } catch (err: any) {
       return res.status(500).json({
@@ -661,6 +683,7 @@ export async function registerRoutes(
     ]);
     return res.json({
       version: "2.0.0", model: "ORFHEUSS Universal",
+      baseline: EU_BASELINE_SCOPE,
       organizations: orgs.length, scopes: allScopes.length, connectors: allConnectors.length, intents: intentStats,
       gateProfiles: ["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"],
       sectors: ["healthcare", "finance", "education", "government", "technology", "legal", "energy", "transport", "retail", "manufacturing", "other"],
