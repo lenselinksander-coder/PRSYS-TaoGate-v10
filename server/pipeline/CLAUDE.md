@@ -6,18 +6,24 @@ BLOCK=4 > ESCALATE_REGULATORY=3 > ESCALATE_HUMAN=2 > PASS_WITH_TRANSPARENCY=1 > 
 latticeMax() kiest altijd de meest restrictieve beslissing. Nooit verzachten.
 D_final = max(D_gate, D_scope, D_runtime)
 
-## Pipelinevolgorde (routes.ts)
-1. EU Legal Gate (euLegalGate) — altijd EERST, voor elke tape-lookup
+## routes.ts /api/gate (tape-based, TRST)
+1. EU Legal Gate (euLegalGate) — altijd EERST, terminaal bij Art. 5 treffer
 2. Tape lookup (tapeId of scopeId)
-3. Valkyrie exposure guard — blokkeert exposure als D ≥ ESCALATE_HUMAN
-4. executeTaoGate() — D_final = max(D_gate, D_scope, D_runtime)
-4b. CoVe (q4b VERIFY) — CV = V(G)⊥V(L)⊥V(E)
-    V(G)=Hypatia · V(L)=EuLegalGate · V(E)=Arachne (evaluators ≠ producenten, I6)
-    D_final_verified = latticeMax(D_final, CV) — nooit verzachten
-    Falen van één pad = ESCALATE_HUMAN, nooit stilte
-5. Castra (Hypatia + Phronesis)
-6. Vector Legitimacy Engine
-7. Audit (Tabularium)
+3. executeTaoGate() via trst.ts — TRST axioma's + physics
+NB: runPipeline() en classifyIntent() volgen een ander pad (zie onder)
+
+## runPipeline() volgorde (pipeline/index.ts)
+1.  Argos — lege invoer check → early return als EMPTY
+2.  Arachne — structuur + imperatief-detectie
+3.  Logos — domein-classificatie
+4.  Cerberus (orchestrateGate) — gate-beslissing → D_gate
+5.  Castra — Hypatia (risk) + Phronesis (capacity) → D_scope, D_runtime
+6.  Vector Legitimacy Engine — D_vector → D_runtime_final
+7.  Valkyrie — signaleert GUARDED/CLEARED (informatief; enforcement zit in TaoGate)
+8.  TaoGate — D_final = max(D_gate, D_scope, D_runtime_final)
+9.  CoVe q4b — D_final_verified = latticeMax(D_final, CV)
+    CV = V(G)⊥V(L)⊥V(E) · I6: evaluators ≠ producenten
+10. Audit (Tabularium)
 
 ## Kritische regels
 - `ESCALATE` (alias) = `ESCALATE_HUMAN` — normaliseDecision() converteert dit
