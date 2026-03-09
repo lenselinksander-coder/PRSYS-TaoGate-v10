@@ -51,6 +51,8 @@ Dit betekent:
 - ❌ `import { hypatiaRisk } from "../trace/hypatia"` — directe import van intern bestand
 
 > **Uitzondering:** De `index.ts`-bestanden zelf en test-bestanden zijn vrijgesteld van deze regel.
+>
+> Deze grens wordt ook meegenomen in `python -m tao_gate.system_check`, samen met checks op de aanwezigheid van de architectuurdocumentatie en de publieke `index.ts`-bestanden per subsysteem.
 
 ## Public API Index Files per Subsysteem
 

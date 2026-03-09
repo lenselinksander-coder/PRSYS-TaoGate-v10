@@ -43,9 +43,10 @@ zelfdiagnose, HDS + Valkyries, en beslisprioriteit.
 python -m tao_gate.system_check
 ```
 
-Voert 17 onafhankelijke checks uit over alle governance-lagen
+Voert 20 onafhankelijke checks uit over alle governance-lagen
 (GateParams, instabiliteit, GDPR, Cerberus, Barbatos, O36, SI/TI,
-DYMPHNA, INUIT, HOLD-drempel, Valkyries, explain_decision).
+DYMPHNA, INUIT, HOLD-drempel, Valkyries, explain_decision én
+architectuurgrenzen zoals documentatie, publieke indexen en import-boundaries).
 Geeft `Overall: OK` als alle checks slagen.
 
 ### 2. HDS + Valkyries

@@ -624,6 +624,22 @@ class TestSystemCheck(unittest.TestCase):
             msg="No monotone-safety check found in system check report.",
         )
 
+    def test_report_covers_architecture_solidity_checks(self) -> None:
+        """System check must include architecture structure and boundary checks."""
+        names = [c.name for c in self.report.checks]
+        self.assertTrue(
+            any("Architecture docs" in n for n in names),
+            msg="No architecture documentation check found in system check report.",
+        )
+        self.assertTrue(
+            any("Architecture indexes" in n for n in names),
+            msg="No public index check found in system check report.",
+        )
+        self.assertTrue(
+            any("Architecture imports" in n for n in names),
+            msg="No import-boundary check found in system check report.",
+        )
+
     def test_overall_fail_when_check_fails(self) -> None:
         """overall must be 'FAIL' when at least one check fails."""
         from tao_gate.system_check import SystemCheckReport, CheckResult
