@@ -69,7 +69,19 @@ export async function registerRoutes(
         trst: { decision_context: decision.dc, canon: decision.canon, physics: decision.physics, axioms_satisfied: decision.axioms_satisfied, axioms_violated: [] },
       });
     } catch (err: any) {
-      return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
+      // Cerberus fail-safe: een onverwachte exception mag nooit een niet-BLOCK response produceren.
+      // Retourneer altijd een gestructureerd BLOCK — nooit een 500 met debug-info naar de client.
+      console.error("[taogate] executeTaoGate() exception:", err);
+      return res.json({
+        status: "BLOCK",
+        category: "SYSTEM_ERROR",
+        escalation: "SYSTEM_ADMIN",
+        layer: "SYSTEM",
+        reason: "Gate uitvoering mislukt — geblokkeerd als fail-safe (Cerberus).",
+        processingMs: 0,
+        lexiconSource: "internal",
+        lexiconDeterministic: "false",
+      });
     }
   });
 

@@ -165,7 +165,9 @@ export function formatEuBlockAsGateResponse(result: EuLegalResult, input: string
       decision_context: { input_hash: hashText(input), tape_id: "TAPE-EU2" },
       canon: "TGA1: G ≠ L ≠ E · TGA2: BLOCK > alles",
       axioms_satisfied: ["TGA2", "TGA5", "TGA7"],
-      axioms_violated: ["TGA8"],
+      // TGA8 (Immutable Trace) wordt gehandhaafd door de WORM-auditchain — niet geschonden.
+      // EU-block produceert geen TRST-specifieke axioma-schendingen; lege array is correct.
+      axioms_violated: [],
     },
   };
 }
