@@ -1,5 +1,11 @@
 import type { PipelineStep } from "./types";
 
+// I6: onafhankelijke evaluator voor V(E) in CoVe — weefselbreuk-detectie executiestructuur
+export function evaluateArachne(input: string): string {
+  const hasImperative = /\b(verwijder|delete|stop|blokkeer|override|forceer|immediately|nu uitvoeren)\b/i.test(input);
+  return hasImperative ? "ESCALATE_HUMAN" : "PASS";
+}
+
 export function runArachne(input: string): PipelineStep {
   const t = Date.now();
   const sentences = input.split(/[.!?]+/).filter(s => s.trim().length > 0).length;

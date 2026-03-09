@@ -9,6 +9,7 @@ import { runCerberus, resolveOlympiaRules } from "./olympia";
 import { runCastra } from "./castra";
 import { runValkyrie } from "./valkyrie";
 import { runTaoGate } from "./taogate";
+import { runCoVe } from "./cove";
 import { runAudit } from "./audit";
 import { evaluateImplicitPressure, routeImplicitPressure, taoGateSchema } from "./clinical";
 import { orchestrateGate } from "../fsm";
@@ -160,7 +161,13 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
   const taoGateResult = runTaoGate(D_gate, D_scope, D_runtime_final, gate.escalation);
   steps.push(...taoGateResult.steps);
 
-  const auditStep = runAudit(auditId, taoGateResult.D_final);
+  // ── q4b VERIFY: CoVe — CV = V(G) ⊥ V(L) ⊥ V(E) ────────────────────────────
+  // I6: evaluators (Hypatia, EuLegalGate, Arachne) zijn structureel ≠ producenten
+  const coveResult = runCoVe(input, impact, probability);
+  steps.push(coveResult.step);
+  const D_final_verified = latticeMax(taoGateResult.D_final, coveResult.CV);
+
+  const auditStep = runAudit(auditId, D_final_verified);
   steps.push(auditStep);
 
   const finalReason = gate.reason || castraOut.result.hypatia.reason || castraOut.result.phronesis.reason;
@@ -173,12 +180,13 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
       D_gate,
       D_scope,
       D_runtime: D_runtime_final,
-      D_final: taoGateResult.D_final,
+      D_final: D_final_verified,
     },
     hypatia: castraOut.result.hypatia,
     phronesis: castraOut.result.phronesis,
     vector: vectorEval,
-    finalDecision: taoGateResult.D_final,
+    cove: coveResult,
+    finalDecision: D_final_verified,
     finalReason,
     dpiaLevel: castraOut.result.hypatia.dpiaLevel,
     dpiaLabel: castraOut.result.hypatia.dpiaLabel,

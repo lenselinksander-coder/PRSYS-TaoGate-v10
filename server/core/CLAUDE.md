@@ -26,5 +26,8 @@ A8  Immutable Trace: append-only, hash-chained audit — nooit schrijven, nooit 
 A6  Structural Determinism: identieke DecisionContext = identieke decision_hash
 A13 Frame Supremacy: TRSTConfig wordt bevroren bij boot, nooit runtime wijzigen
 A10 Bounded Execution: timeout = HARD_BLOCK
+I6  CoVe Independence: Geen laag verifieert haar eigen output
+    V(G)=Hypatia · V(L)=EuLegalGate · V(E)=Arachne · state=q4b VERIFY
+    Falen van één pad → ESCALATE_HUMAN, nooit stilte
 
 Laagorde (bindend): Hardware/OS < TRST < TGR < TaoGate < PRSYS < Interface

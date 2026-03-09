@@ -10,7 +10,11 @@ D_final = max(D_gate, D_scope, D_runtime)
 1. EU Legal Gate (euLegalGate) — altijd EERST, voor elke tape-lookup
 2. Tape lookup (tapeId of scopeId)
 3. Valkyrie exposure guard — blokkeert exposure als D ≥ ESCALATE_HUMAN
-4. executeTaoGate()
+4. executeTaoGate() — D_final = max(D_gate, D_scope, D_runtime)
+4b. CoVe (q4b VERIFY) — CV = V(G)⊥V(L)⊥V(E)
+    V(G)=Hypatia · V(L)=EuLegalGate · V(E)=Arachne (evaluators ≠ producenten, I6)
+    D_final_verified = latticeMax(D_final, CV) — nooit verzachten
+    Falen van één pad = ESCALATE_HUMAN, nooit stilte
 5. Castra (Hypatia + Phronesis)
 6. Vector Legitimacy Engine
 7. Audit (Tabularium)
