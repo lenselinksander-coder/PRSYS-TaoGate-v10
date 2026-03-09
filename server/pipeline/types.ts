@@ -67,6 +67,15 @@ export type PipelineLattice = {
   D_final: string;
 };
 
+export type CoVeResult = {
+  V_G: string;     // Gate-verificatie via Hypatia
+  V_L: string;     // Legal-verificatie via EuLegalGate
+  V_E: string;     // Executie-verificatie via Arachne
+  CV: string;      // Compositie = latticeMax(V_G, V_L, V_E)
+  failed: boolean; // true als één pad een fout veroorzaakte (I6: nooit stilte)
+  step: PipelineStep;
+};
+
 export type PipelineResult = {
   auditId: string;
   input: string;
@@ -81,6 +90,7 @@ export type PipelineResult = {
   dpiaLevel: DpiaLevel;
   dpiaLabel: string;
   processingMs: number;
+  cove?: CoVeResult;
 };
 
 export type ScopeClassification = {

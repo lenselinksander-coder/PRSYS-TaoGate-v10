@@ -23,6 +23,14 @@
 //   A11 SI-stabiliteit vereist TI ≥ TI_min
 //   A12 Trust is Derived
 //   A13 Frame Supremacy
+//
+// CoVe-Invariant (EN-2026-002):
+//   I6  CoVe Independence: Geen laag verifieert haar eigen output.
+//       Verificatie vereist een onafhankelijk pad, een onafhankelijke
+//       evaluator, en een onafhankelijke trace.
+//       Sluit gap: A6 (hash = ongewijzigd?) → I6 (correct?) → A8 (immutable trace).
+//       V(G)=Hypatia · V(L)=EuLegalGate · V(E)=Arachne. State: q4b VERIFY.
+//       Falen van één pad → ESCALATE_HUMAN, nooit stilte.
 
 import * as crypto from "crypto";
 import { performance } from "perf_hooks";

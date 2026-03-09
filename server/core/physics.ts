@@ -4,7 +4,7 @@
 //   2. R hernoemd naar SI (Spanningsindex): SI = τ × ω
 //   3. Resonantie teruggeplaatst naar Canon (Laag 0) — niet formaliseerbaar als getal
 //
-// State Machine: q0 INIT → q1 MANDATE_CHECK → q2 PRE_GATE (TI-GATE) → q3 EXECUTE → q4 POST_GATE → q5 REPORT → q6 ESCALATE → q7 BLOCK → q8 CLOSE
+// State Machine: q0 INIT → q1 MANDATE_CHECK → q2 PRE_GATE (TI-GATE) → q3 EXECUTE → q4 POST_GATE → q4b VERIFY (CoVe: V(G)⊥V(L)⊥V(E)) → q5 REPORT → q6 ESCALATE → q7 BLOCK → q8 CLOSE
 //
 // F2: SI = τ × ω           [alleen geldig binnen gevalideerde TI-envelop]
 // F4: ω ≤ f(τ − σ_ext)     [O36-constraint]
