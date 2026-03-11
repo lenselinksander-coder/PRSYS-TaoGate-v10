@@ -20,6 +20,7 @@ import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace/hypatia";
 import { testudoStatus } from "./middleware/testudo";
 import { runEuLegalGate, formatEuBlockAsGateResponse } from "./core/euLegalGate";
 import { EU_BASELINE_SCOPE } from "./core/euBaseline";
+import { appendWormEntry } from "./audit/wormChain";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -72,6 +73,18 @@ export async function registerRoutes(
       // Cerberus fail-safe: een onverwachte exception mag nooit een niet-BLOCK response produceren.
       // Retourneer altijd een gestructureerd BLOCK — nooit een 500 met debug-info naar de client.
       console.error("[taogate] executeTaoGate() exception:", err);
+      // A8 (Immutable Trace): ook een SYSTEM_ERROR BLOCK moet in de WORM-keten verschijnen.
+      // req.body is beschikbaar in catch (outer function scope); text kan ontbreken bij parse-fout.
+      appendWormEntry({
+        orgId: null,
+        connectorId: null,
+        inputText: typeof req.body?.text === "string" ? req.body.text : "",
+        decision: "BLOCK",
+        category: "SYSTEM_ERROR",
+        layer: "SYSTEM",
+        pressure: null,
+        processingMs: 0,
+      });
       return res.json({
         status: "BLOCK",
         category: "SYSTEM_ERROR",
