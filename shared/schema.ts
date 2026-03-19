@@ -57,6 +57,26 @@ export const ingestMetaSchema = z.object({
 
 export type IngestMeta = z.infer<typeof ingestMetaSchema>;
 
+// ── Scope metadata (operational TaoGate parameters) ────────
+// Persisted from scope_meta block in CoVe / TaoGate v10 import format.
+// If present, gate-pipeline falls back to these instead of org-level defaults.
+export const scopeMetaSchema = z.object({
+  /** TI minimum threshold for this scope (0–1) */
+  tiMin: z.number().min(0).max(1).optional(),
+  /** S-threshold for Vector Engine */
+  sectorThreshold: z.number().min(0).max(1).optional(),
+  /** α/β/γ weights for TI calculation */
+  tiWeights: z.object({
+    alpha: z.number(),
+    beta: z.number(),
+    gamma: z.number(),
+  }).optional(),
+  /** Sector gate profile override */
+  gateProfile: z.string().optional(),
+});
+
+export type ScopeMeta = z.infer<typeof scopeMetaSchema>;
+
 export const gateProfiles = ["CLINICAL", "GENERAL", "FINANCIAL", "LEGAL", "EDUCATIONAL", "CUSTOM"] as const;
 export type GateProfile = typeof gateProfiles[number];
 
@@ -102,6 +122,7 @@ export const scopes = pgTable("scopes", {
   documents: jsonb("documents").notNull().$type<ScopeDocument[]>().default([]),
   rules: jsonb("rules").notNull().$type<ScopeRule[]>().default([]),
   ingestMeta: jsonb("ingest_meta").$type<IngestMeta>(),
+  scopeMeta: jsonb("scope_meta").$type<ScopeMeta>(),
   isDefault: text("is_default").default("false"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -113,6 +134,7 @@ export const insertScopeSchema = createInsertSchema(scopes, {
   rules: z.array(scopeRuleSchema).optional(),
   status: z.enum(scopeStatuses).optional(),
   ingestMeta: ingestMetaSchema.optional(),
+  scopeMeta: scopeMetaSchema.optional(),
 }).omit({
   id: true,
   createdAt: true,
