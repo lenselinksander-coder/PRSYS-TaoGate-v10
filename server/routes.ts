@@ -4,8 +4,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, insertScopeSchema, insertOrganizationSchema, gateProfiles } from "@shared/schema";
-import { getTapeDeck } from "./core/init";
-import { executeTaoGate } from "./core/trst";
+import { getTapeDeck, executeTaoGate, runEuLegalGate, formatEuBlockAsGateResponse, EU_BASELINE_SCOPE } from "./core";
 import { researchTopic, extractScopeFromResearch } from "./perplexity";
 import { repairPdfJson, extractJsonObject, structurePdfText } from "./services/pdfParser";
 import {
@@ -16,10 +15,8 @@ import {
   preflightCheck,
 } from "./pipeline";
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
-import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace/hypatia";
-import { testudoStatus } from "./middleware/testudo";
-import { runEuLegalGate, formatEuBlockAsGateResponse } from "./core/euLegalGate";
-import { EU_BASELINE_SCOPE } from "./core/euBaseline";
+import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace";
+import { testudoStatus } from "./middleware";
 import { appendWormEntry } from "./audit/wormChain";
 
 export async function registerRoutes(
@@ -724,6 +721,7 @@ export async function registerRoutes(
       const orgDefs = [
         { name: "Erasmus MC", slug: "erasmus-mc", description: "Academisch Ziekenhuis", sector: "healthcare", gateProfile: "CLINICAL" },
         { name: "Kraaijenvanger", slug: "kraaijenvanger", description: "Architectenbureau", sector: "other", gateProfile: "CUSTOM" },
+        { name: "SVB", slug: "svb", description: "Sociale Verzekeringsbank — Publieke financiële instelling", sector: "finance", gateProfile: "FINANCIAL" },
       ];
 
       const createdOrgs: Record<string, string> = {};
@@ -786,6 +784,31 @@ export async function registerRoutes(
             { layer: "NATIONAL", title: "AP toezicht algoritmes", action: "ESCALATE_REGULATORY", domain: "AI", ruleId: "NL_AP_ALGO", source: "Autoriteit Persoonsgegevens", article: "AVG Art. 35", description: "AP houdt toezicht op algoritmes.", overridesLowerLayers: false },
             { layer: "REGIONAL", title: "GGD regionaal protocol AI", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "REG_GGD_AI", source: "GGD Protocol", article: "Regionaal", description: "GGD-protocollen voor AI.", overridesLowerLayers: false },
             { layer: "MUNICIPAL", title: "Gemeentelijk algoritmeregister", action: "PASS_WITH_TRANSPARENCY", domain: "AI", ruleId: "MUN_ALGO_REG", source: "Gemeentelijke verordening", article: "Lokaal", description: "Gemeente algoritmeregister.", overridesLowerLayers: false },
+          ],
+        },
+        {
+          name: "Finance", description: "SVB — Financiële AI governance scope voor publieke financiële dienstverlening", orgName: "SVB", isDefault: "true",
+          categories: [
+            { name: "FRAUDE_DETECTIE", color: "", label: "Fraude Detectie", status: "ESCALATE_HUMAN", keywords: ["fraude","witwassen","money laundering","verdachte transactie","suspicious transaction","fraude detectie","anti-witwas","wwft","aml","unusual transaction","ongebruikelijke transactie","fraudepatroon","identity fraud","identiteitsfraude"], escalation: "Compliance Officer / FIU" },
+            { name: "KREDIET_SCORING", color: "", label: "Kredietbeoordeling (Hoog Risico)", status: "ESCALATE_HUMAN", keywords: ["kredietbeoordeling","credit scoring","credit check","kredietscore","leencapaciteit","kredietwaardigheid","risicoprofiel klant","automatische afwijzing","loan decision","hypotheek beoordeling","schuldbeoordeling","betalingsgedrag","creditrating"], escalation: "Risk Manager / DPO" },
+            { name: "GEAUTOMATISEERDE_BESLUITVORMING", color: "", label: "Geautomatiseerde Financiële Besluitvorming", status: "BLOCK", keywords: ["automatische afwijzing uitkering","geautomatiseerde beslissing","automated decision","uitkering stopzetten","benefiet weigering","automatisch blokkeren rekening","account freeze automated","sanctiescreening automatisch","pep screening automated","zonder menselijke beoordeling"], escalation: "Bezwaarcommissie / DPO" },
+            { name: "TRANSACTIE_MONITORING", color: "", label: "Transactie Monitoring", status: "PASS_WITH_TRANSPARENCY", keywords: ["transactie monitoring","payment monitoring","betaalverkeer","transactiepatroon","real-time monitoring","batch monitoring","betaalgedrag analyse","cashflow analyse","transaction screening","sanctions screening"], escalation: "Compliance Officer" },
+            { name: "KLANT_PROFILERING", color: "", label: "Klant Profilering (AVG Risico)", status: "ESCALATE_HUMAN", keywords: ["klantprofiel","customer profiling","gedragsprofiel","risicoprofiel","klant segmentatie","predictive analytics klant","churn prediction","lifetime value","koopgedrag","financieel profiel","doelgroep targeting"], escalation: "DPO / Marketing Compliance" },
+            { name: "REGULATORY_REPORTING", color: "", label: "Regulatoire Rapportage", status: "PASS_WITH_TRANSPARENCY", keywords: ["dnb rapportage","ecb rapportage","regulatory reporting","toezichthouder rapportage","mifid","solvency","capital requirements","liquiditeitsrapportage","stresstesten","afm melding"], escalation: "Regulatory Affairs" },
+            { name: "FINANCIEEL_ADVIES_AI", color: "", label: "AI-gestuurd Financieel Advies", status: "ESCALATE_HUMAN", keywords: ["robo advisor","beleggingsadvies ai","geautomatiseerd advies","financieel advies","pensioenadvies ai","vermogensbeheer ai","portfolio optimalisatie","investment recommendation","automated financial advice","hypotheekadvies ai"], escalation: "AFM / Compliance" },
+          ],
+          documents: [
+            { type: "visiedocument", title: "SVB — Financiële AI Governance Visie", content: "SVB implementeert AI-governance conform de EU AI Act, Wwft, en AVG voor alle geautomatiseerde financiële processen. Geen financieel besluit zonder menselijke autorisatie." },
+            { type: "mandaat", title: "Mandaat — Menselijk Toezicht Financiële AI", content: "Alle geautomatiseerde financiële besluitvorming (krediet, uitkeringen, sancties) vereist menselijke beoordeling conform AVG Art. 22 en EU AI Act Art. 14." },
+            { type: "protocol", title: "Protocol — Wwft/AML Compliance", content: "AI-systemen voor transactiemonitoring en fraudedetectie opereren onder Wwft-verplichting: ongebruikelijke transacties melden bij FIU-Nederland." },
+          ],
+          rules: [
+            { layer: "EU", title: "Verboden AI — Financiële Sociale Scoring", action: "BLOCK", domain: "FINANCE", ruleId: "EU_AI_FIN_ART5", source: "EU AI Act", article: "Artikel 5", description: "AI-systemen die financiële sociale scoring toepassen op basis van gedragsdata zijn verboden.", overridesLowerLayers: true },
+            { layer: "EU", title: "Hoog-risico — Kredietbeoordeling AI", action: "ESCALATE_HUMAN", domain: "FINANCE", ruleId: "EU_AI_FIN_ART6", source: "EU AI Act", article: "Artikel 6 / Annex III(5b)", description: "AI voor kredietbeoordeling en risicoclassificatie is hoog-risico en vereist conformiteitsbeoordeling.", overridesLowerLayers: true },
+            { layer: "EU", title: "AVG Art. 22 — Geautomatiseerde Besluitvorming", action: "BLOCK", domain: "FINANCE", ruleId: "EU_AVG_ART22_FIN", source: "AVG/GDPR", article: "Artikel 22", description: "Volledig geautomatiseerde besluiten met rechtsgevolgen (krediet, uitkering, blokkade) zijn verboden zonder menselijke tussenkomst.", overridesLowerLayers: true },
+            { layer: "NATIONAL", title: "Wwft — Meldplicht Ongebruikelijke Transacties", action: "ESCALATE_REGULATORY", domain: "FINANCE", ruleId: "NL_WWFT_MOT", source: "Wwft", article: "Art. 16", description: "Ongebruikelijke transacties moeten worden gemeld bij FIU-Nederland.", overridesLowerLayers: true },
+            { layer: "NATIONAL", title: "Wft — Zorgplicht Financiële Dienstverlening", action: "ESCALATE_HUMAN", domain: "FINANCE", ruleId: "NL_WFT_ZORG", source: "Wft", article: "Art. 4:24a", description: "Financiële dienstverleners hebben zorgplicht richting klant; AI-advies vereist menselijke validatie.", overridesLowerLayers: false },
+            { layer: "NATIONAL", title: "DNB Toezicht — AI in Financiële Sector", action: "ESCALATE_REGULATORY", domain: "FINANCE", ruleId: "NL_DNB_AI", source: "DNB Guidance", article: "Good Practice", description: "DNB verwacht modelvalidatie en uitlegbaarheid voor AI-modellen in de financiële sector.", overridesLowerLayers: false },
           ],
         },
       ];

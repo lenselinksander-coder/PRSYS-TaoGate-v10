@@ -1,10 +1,10 @@
-import { hypatiaRisk, DPIA_LEVEL_LABELS, type HypatiaResult } from "../trace/hypatia";
-import { phronesisCapacity, type PhronesisResult } from "../trace/phronesis";
+import { hypatiaRisk, DPIA_LEVEL_LABELS, type HypatiaResult } from "../trace";
+import { phronesisCapacity, type PhronesisResult } from "../trace";
 import type { PipelineStep, CastraResult } from "./types";
 import { normaliseDecision } from "./types";
 
-export { hypatiaRisk } from "../trace/hypatia";
-export { phronesisCapacity } from "../trace/phronesis";
+export { hypatiaRisk } from "../trace";
+export { phronesisCapacity } from "../trace";
 
 export function runCastra(opts: {
   cerberusBlocked: boolean;

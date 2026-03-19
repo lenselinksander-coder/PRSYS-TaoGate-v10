@@ -12,7 +12,7 @@ import { runTaoGate } from "./taogate";
 import { runCoVe } from "./cove";
 import { runAudit } from "./audit";
 import { evaluateImplicitPressure, routeImplicitPressure, taoGateSchema } from "./clinical";
-import { orchestrateGate } from "../fsm/gateOrchestrator";
+import { orchestrateGate } from "../fsm";
 import { cerberusEnforce, normaliseDecision, latticeMax } from "./types";
 import { evaluateVector } from "../vector_engine";
 import type { VectorEvaluation, VectorDecision } from "../vector_engine";
@@ -26,8 +26,8 @@ import type {
   HypatiaResult,
   PhronesisResult,
 } from "./types";
-import { hypatiaRisk, classifyDpiaLevel, DPIA_LEVEL_LABELS } from "../trace/hypatia";
-import { phronesisCapacity } from "../trace/phronesis";
+import { hypatiaRisk, classifyDpiaLevel, DPIA_LEVEL_LABELS } from "../trace";
+import { phronesisCapacity } from "../trace";
 
 export type { PipelineInput, PipelineResult, PipelineStep, ScopeClassification, OlympiaResolution } from "./types";
 export { classifyWithScope } from "./logos";

@@ -1,12 +1,12 @@
 import type { GateProfile, GateDecision, Scope, ScopeRule, RuleLayer } from "@shared/schema";
-import type { HypatiaResult, DpiaLevel } from "../trace/hypatia";
-import type { PhronesisResult } from "../trace/phronesis";
+import type { HypatiaResult, DpiaLevel } from "../trace";
+import type { PhronesisResult } from "../trace";
 import type { GateResult } from "../gateSystem";
 import type { VectorEvaluation } from "../vector_engine";
 
 export type { GateResult } from "../gateSystem";
-export type { HypatiaResult, DpiaLevel } from "../trace/hypatia";
-export type { PhronesisResult } from "../trace/phronesis";
+export type { HypatiaResult, DpiaLevel } from "../trace";
+export type { PhronesisResult } from "../trace";
 export type { VectorEvaluation } from "../vector_engine";
 
 export const DECISION_ORDER = ["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"] as const;
