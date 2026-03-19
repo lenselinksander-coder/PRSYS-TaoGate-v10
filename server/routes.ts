@@ -17,6 +17,7 @@ import {
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
 import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace";
 import { testudoStatus } from "./middleware";
+import { appendWormEntry } from "./audit/wormChain";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -66,7 +67,31 @@ export async function registerRoutes(
         trst: { decision_context: decision.dc, canon: decision.canon, physics: decision.physics, axioms_satisfied: decision.axioms_satisfied, axioms_violated: [] },
       });
     } catch (err: any) {
-      return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
+      // Cerberus fail-safe: een onverwachte exception mag nooit een niet-BLOCK response produceren.
+      // Retourneer altijd een gestructureerd BLOCK — nooit een 500 met debug-info naar de client.
+      console.error("[taogate] executeTaoGate() exception:", err);
+      // A8 (Immutable Trace): ook een SYSTEM_ERROR BLOCK moet in de WORM-keten verschijnen.
+      // req.body is beschikbaar in catch (outer function scope); text kan ontbreken bij parse-fout.
+      appendWormEntry({
+        orgId: null,
+        connectorId: null,
+        inputText: typeof req.body?.text === "string" ? req.body.text : "",
+        decision: "BLOCK",
+        category: "SYSTEM_ERROR",
+        layer: "SYSTEM",
+        pressure: null,
+        processingMs: 0,
+      });
+      return res.json({
+        status: "BLOCK",
+        category: "SYSTEM_ERROR",
+        escalation: "SYSTEM_ADMIN",
+        layer: "SYSTEM",
+        reason: "Gate uitvoering mislukt — geblokkeerd als fail-safe (Cerberus).",
+        processingMs: 0,
+        lexiconSource: "internal",
+        lexiconDeterministic: "false",
+      });
     }
   });
 

@@ -1,4 +1,4 @@
-import { hypatiaRisk, type HypatiaResult } from "../trace";
+import { hypatiaRisk, DPIA_LEVEL_LABELS, type HypatiaResult } from "../trace";
 import { phronesisCapacity, type PhronesisResult } from "../trace";
 import type { PipelineStep, CastraResult } from "./types";
 import { normaliseDecision } from "./types";
@@ -20,7 +20,7 @@ export function runCastra(opts: {
   let phronesis: PhronesisResult;
 
   if (cerberusBlocked) {
-    hypatia = { impact, probability, risk: 1.0, decision: "BLOCK", thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief." };
+    hypatia = { impact, probability, risk: 1.0, decision: "BLOCK", thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief.", dpiaLevel: 5, dpiaLabel: DPIA_LEVEL_LABELS[5] };
     steps.push({
       name: "Hypatia",
       symbol: "⚖",
