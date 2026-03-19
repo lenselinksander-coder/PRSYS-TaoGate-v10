@@ -217,7 +217,7 @@ export const intents = pgTable("intents", {
   processingMs: integer("processing_ms"),
   dpiaLevel: integer("dpia_level"),
   lexiconSource: text("lexicon_source").notNull().default("internal"),
-  // TODO: lexiconDeterministic — string ("true"/"false") door hele codebase.
+  // TODO: lexiconDeterministic — string ("true"/"false") door de hele codebase.
   // Bij volgende schema-versie migreren naar boolean. Niet nu.
   lexiconDeterministic: text("lexicon_deterministic").notNull().default("true"),
   subjectRef: varchar("subject_ref"),

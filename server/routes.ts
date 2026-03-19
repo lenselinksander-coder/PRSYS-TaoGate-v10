@@ -519,7 +519,7 @@ export async function registerRoutes(
     const parsed = importJsonSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const { orgId, name, description, data, scope_meta } = parsed.data;
+      const { orgId, name, description, data, scope_meta: scopeMeta } = parsed.data;
 
       // Merge: root-level arrays win when non-empty (CoVe format), else fall back to data.*
       const categories = parsed.data.categories.length ? parsed.data.categories : (data?.categories ?? []);
@@ -530,11 +530,11 @@ export async function registerRoutes(
       if (!org) return res.status(404).json({ error: "Organisatie niet gevonden" });
 
       // Map snake_case scope_meta keys to camelCase schema
-      const scopeMetaMapped: ScopeMeta | undefined = scope_meta ? {
-        tiMin: scope_meta.ti_min,
-        sectorThreshold: scope_meta.sector_threshold,
-        tiWeights: scope_meta.ti_weights,
-        gateProfile: scope_meta.gate_profile,
+      const scopeMetaMapped: ScopeMeta | undefined = scopeMeta ? {
+        tiMin: scopeMeta.ti_min,
+        sectorThreshold: scopeMeta.sector_threshold,
+        tiWeights: scopeMeta.ti_weights,
+        gateProfile: scopeMeta.gate_profile,
       } : undefined;
 
       const scope = await storage.createScope({
