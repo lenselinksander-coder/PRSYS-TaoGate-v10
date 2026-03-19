@@ -100,6 +100,7 @@ export const organizations = pgTable("organizations", {
   description: text("description"),
   sector: text("sector").notNull().default("other"),
   gateProfile: text("gate_profile").notNull().default("GENERAL"),
+  activeScopeId: varchar("active_scope_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -193,6 +194,13 @@ export type InsertConnector = z.infer<typeof insertConnectorSchema>;
 export type Connector = typeof connectors.$inferSelect;
 
 // ── Intents (gateway audit log) ────────────────────────────
+// TASK2_INVARIANT: epistemic status of every classification
+// must be machine-readable in the audit trail.
+// TASK5_INVARIANT: every gate decision must be
+// traceable to a specific rule_id or explicitly null (default).
+export const dpiaLevels = [0, 1, 2, 3, 4, 5] as const;
+export type DpiaLevel = typeof dpiaLevels[number];
+
 export const intents = pgTable("intents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orgId: varchar("org_id"),
@@ -205,7 +213,13 @@ export const intents = pgTable("intents", {
   pressure: text("pressure"),
   reason: text("reason"),
   escalation: text("escalation"),
+  ruleId: text("rule_id"),
   processingMs: integer("processing_ms"),
+  dpiaLevel: integer("dpia_level"),
+  lexiconSource: text("lexicon_source").notNull().default("internal"),
+  lexiconDeterministic: text("lexicon_deterministic").notNull().default("true"),
+  subjectRef: varchar("subject_ref"),
+  subjectRefType: varchar("subject_ref_type"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

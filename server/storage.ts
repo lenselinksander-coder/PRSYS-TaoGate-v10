@@ -1,6 +1,6 @@
 import {
   type Observation, type InsertObservation, observations,
-  type Scope, type InsertScope, scopes,
+  type Scope, type InsertScope, scopes, type ScopeRule,
   type Organization, type InsertOrganization, organizations,
   type Connector, type InsertConnector, connectors,
   type Intent, type InsertIntent, intents,
@@ -38,9 +38,13 @@ export interface IStorage {
   deleteConnector(id: string): Promise<boolean>;
   touchConnector(id: string): Promise<void>;
 
+  upsertScopeRules(scopeId: string, rules: ScopeRule[]): Promise<Scope | undefined>;
+
   createIntent(intent: InsertIntent): Promise<Intent>;
   getIntents(orgId?: string, limit?: number): Promise<Intent[]>;
   getIntentStats(orgId?: string): Promise<{ total: number; passed: number; blocked: number; escalated: number }>;
+  getIntentsBySubjectRef(subjectRefHash: string): Promise<Pick<Intent, "id" | "decision" | "category" | "layer" | "reason" | "ruleId" | "dpiaLevel" | "escalation" | "createdAt">[]>;
+  getHerautFeed(limit?: number): Promise<{ decision: string; category: string | null; layer: string | null; dpiaLevel: number | null; reasonShort: string | null; createdAt: Date }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -106,6 +110,40 @@ export class DatabaseStorage implements IStorage {
 
   async getDefaultScope(): Promise<Scope | undefined> {
     const [result] = await db.select().from(scopes).where(eq(scopes.isDefault!, "true"));
+    return result;
+  }
+
+  async upsertScopeRules(scopeId: string, rules: ScopeRule[]): Promise<Scope | undefined> {
+    const scope = await this.getScope(scopeId);
+    if (!scope) return undefined;
+
+    const existingRules: ScopeRule[] = scope.rules || [];
+    const ruleMap = new Map<string, ScopeRule>();
+
+    for (const rule of existingRules) {
+      ruleMap.set(rule.ruleId, rule);
+    }
+
+    for (const incoming of rules) {
+      const existing = ruleMap.get(incoming.ruleId);
+      if (existing) {
+        ruleMap.set(incoming.ruleId, {
+          ...existing,
+          action: incoming.action,
+          description: incoming.description,
+          layer: incoming.layer,
+          overridesLowerLayers: incoming.overridesLowerLayers,
+        });
+      } else {
+        ruleMap.set(incoming.ruleId, incoming);
+      }
+    }
+
+    const merged = Array.from(ruleMap.values());
+    const [result] = await db.update(scopes)
+      .set({ rules: merged, updatedAt: new Date() })
+      .where(eq(scopes.id, scopeId))
+      .returning();
     return result;
   }
 
@@ -217,6 +255,49 @@ export class DatabaseStorage implements IStorage {
       blocked: all.filter(i => i.decision === "BLOCK").length,
       escalated: all.filter(i => i.decision === "ESCALATE_HUMAN" || i.decision === "ESCALATE_REGULATORY").length,
     };
+  }
+
+  async getIntentsBySubjectRef(subjectRefHash: string): Promise<Pick<Intent, "id" | "decision" | "category" | "layer" | "reason" | "ruleId" | "dpiaLevel" | "escalation" | "createdAt">[]> {
+    const rows = await db
+      .select({
+        id: intents.id,
+        decision: intents.decision,
+        category: intents.category,
+        layer: intents.layer,
+        reason: intents.reason,
+        ruleId: intents.ruleId,
+        dpiaLevel: intents.dpiaLevel,
+        escalation: intents.escalation,
+        createdAt: intents.createdAt,
+      })
+      .from(intents)
+      .where(eq(intents.subjectRef!, subjectRefHash))
+      .orderBy(desc(intents.createdAt))
+      .limit(200);
+    return rows;
+  }
+
+  async getHerautFeed(limit = 50): Promise<{ decision: string; category: string | null; layer: string | null; dpiaLevel: number | null; reasonShort: string | null; createdAt: Date }[]> {
+    const rows = await db
+      .select({
+        decision: intents.decision,
+        category: intents.category,
+        layer: intents.layer,
+        dpiaLevel: intents.dpiaLevel,
+        reason: intents.reason,
+        createdAt: intents.createdAt,
+      })
+      .from(intents)
+      .orderBy(desc(intents.createdAt))
+      .limit(Math.min(limit, 200));
+    return rows.map(r => ({
+      decision: r.decision,
+      category: r.category,
+      layer: r.layer,
+      dpiaLevel: r.dpiaLevel,
+      reasonShort: r.reason ? r.reason.slice(0, 80) : null,
+      createdAt: r.createdAt,
+    }));
   }
 }
 

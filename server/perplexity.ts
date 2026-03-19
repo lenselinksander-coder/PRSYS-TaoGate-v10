@@ -195,6 +195,29 @@ Zet dit om naar een scope JSON object.`
   return parsed;
 }
 
+export async function fetchOnderbouwing(ruleTitle: string, source: string): Promise<string> {
+  try {
+    const client = getClient();
+    const query = `${ruleTitle} ${source} Nederlandse bouwregelgeving`;
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content: "Je bent een juridisch assistent. Geef een korte onderbouwing in 2-3 zinnen in het Nederlands. Verwijs naar specifieke artikelen of wetten. Geen opsommingen, geen markdown — alleen vloeiende tekst.",
+        },
+        { role: "user", content: query },
+      ],
+      temperature: 0.1,
+      top_p: 0.9,
+      stream: false,
+    } as any);
+    return response.choices[0]?.message?.content?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
 export interface PreflightResult {
   canLock: boolean;
   issues: string[];

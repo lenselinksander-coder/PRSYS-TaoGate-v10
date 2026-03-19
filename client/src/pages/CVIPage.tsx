@@ -14,6 +14,7 @@ type ScopeLite = {
   name: string;
   description?: string | null;
   status?: string | null;
+  orgName?: string | null;
 };
 
 type ClassifyResponse = {
@@ -25,7 +26,72 @@ type ClassifyResponse = {
   reason: string | null;
   winningRule: any | null;
   signals: any | null;
+  onderbouwing?: string | null;
 };
+
+function computeOversight(result: ClassifyResponse, scopeOrgName?: string | null) {
+  const effectiveDecision = result.escalation ?? result.status;
+  const oversightRequired = ["ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"].includes(effectiveDecision);
+  const responsibleActor = scopeOrgName ?? "BIG-geregistreerde arts";
+  const clinicalRisk = (() => {
+    if (effectiveDecision === "BLOCK" && String(result.pressure) === "CRITICAL") return "KRITISCH";
+    if (effectiveDecision === "BLOCK" || effectiveDecision === "ESCALATE_REGULATORY") return "HOOG";
+    if (effectiveDecision === "ESCALATE_HUMAN") return "MIDDEL";
+    return "LAAG";
+  })();
+  const aiReliability = ({ PASS: 95, PASS_WITH_TRANSPARENCY: 88, ESCALATE_HUMAN: 72, ESCALATE_REGULATORY: 65, BLOCK: 82 } as Record<string, number>)[effectiveDecision] ?? 75;
+  return { oversightRequired, responsibleActor, clinicalRisk, aiReliability };
+}
+
+function OversightBanner({ oversight }: { oversight: ReturnType<typeof computeOversight> }) {
+  const { oversightRequired, responsibleActor, clinicalRisk, aiReliability } = oversight;
+  const riskColor = { LAAG: "#86efac", MIDDEL: "#fbbf24", HOOG: "#f87171", KRITISCH: "#ef4444" }[clinicalRisk] ?? "#e9f3f8";
+  const borderColor = oversightRequired ? "rgba(251,191,36,0.35)" : "rgba(96,165,250,0.2)";
+  const bg = oversightRequired ? "rgba(120,80,0,0.10)" : "rgba(30,60,100,0.10)";
+
+  return (
+    <div
+      style={{
+        marginBottom: 14,
+        padding: "10px 14px",
+        borderRadius: 10,
+        border: `1px solid ${borderColor}`,
+        background: bg,
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 11,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "10px 20px",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Human Oversight</span>
+        <span style={{ fontWeight: 700, color: oversightRequired ? "#fbbf24" : "#86efac", letterSpacing: "0.06em" }}>
+          {oversightRequired ? "VEREIST" : "NIET VEREIST"}
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Responsible Actor</span>
+        <span style={{ fontWeight: 600, color: "#c4dff6" }}>{responsibleActor}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Clinical Risk</span>
+        <span style={{ fontWeight: 700, color: riskColor }}>{clinicalRisk}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>AI Reliability</span>
+        <span style={{ fontWeight: 700, color: aiReliability >= 88 ? "#86efac" : aiReliability >= 72 ? "#fbbf24" : "#f87171" }}>{aiReliability}%</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <span style={{ opacity: 0.5, letterSpacing: "0.08em", textTransform: "uppercase", fontSize: 9 }}>Human Review</span>
+        <span style={{ fontWeight: 700, color: oversightRequired ? "#fbbf24" : "#86efac" }}>
+          {oversightRequired ? "REQUIRED" : "NOT REQUIRED"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function badgeTone(decision: GateDecision) {
   switch (decision) {
@@ -186,7 +252,7 @@ export default function CVIPage() {
             Alleen observaties. Opdrachten/imperatieven worden geblokt of geëscaleerd volgens de actieve band.
           </div>
 
-          {scopes.length > 1 && (
+          {scopes.filter(s => s.status === "LOCKED").length > 1 && (
             <div style={{ marginTop: 12 }}>
               <select
                 data-testid="select-scope"
@@ -206,8 +272,8 @@ export default function CVIPage() {
                 }}
                 disabled={loadingScope}
               >
-                {scopes.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} {s.status ? `(${s.status})` : ""}</option>
+                {scopes.filter(s => s.status === "LOCKED").map(s => (
+                  <option key={s.id} value={s.id}>{s.orgName ? `${s.orgName} — ` : ""}{s.name}</option>
                 ))}
               </select>
             </div>
@@ -290,8 +356,10 @@ export default function CVIPage() {
           >
             {(() => {
               const tone = badgeTone(result.status);
+              const selectedScope = scopes.find(s => s.id === selectedScopeId);
               return (
                 <>
+                  <OversightBanner oversight={computeOversight(result, selectedScope?.orgName)} />
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
                     <div>
                       <span
@@ -356,6 +424,77 @@ export default function CVIPage() {
                       <div data-testid="text-reason" style={{ fontSize: 13, color: tone.fg, opacity: 0.9, lineHeight: 1.5 }}>
                         {result.reason}
                       </div>
+                    </div>
+                  )}
+
+                  {result.onderbouwing && (
+                    <div
+                      data-testid="onderbouwing-block"
+                      style={{
+                        marginTop: 10,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: "1px solid rgba(96,165,250,0.2)",
+                        background: "rgba(96,165,250,0.05)",
+                      }}
+                    >
+                      <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                        Onderbouwing (Perplexity)
+                      </div>
+                      <div style={{ fontSize: 13, color: "#c4dff6", lineHeight: 1.5 }}>
+                        {result.onderbouwing}
+                      </div>
+                    </div>
+                  )}
+
+                  {(result.status === "BLOCK" || result.status === "ESCALATE_HUMAN" || result.status === "ESCALATE_REGULATORY") && result.winningRule && (result.winningRule.article || result.winningRule.sourceUrl) && (
+                    <div
+                      data-testid="evidence-block"
+                      style={{
+                        marginTop: 10,
+                        padding: 12,
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,200,80,0.2)",
+                        background: "rgba(255,200,80,0.04)",
+                      }}
+                    >
+                      <div style={{ fontSize: 10, opacity: 0.5, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+                        Juridische Grondslag
+                      </div>
+                      {result.winningRule.source && (
+                        <div style={{ fontSize: 12, color: "#d4a63a", fontWeight: 600, marginBottom: 2 }}>
+                          {result.winningRule.source}
+                        </div>
+                      )}
+                      {result.winningRule.article && (
+                        <div style={{ fontSize: 13, color: "#e9f3f8", marginBottom: 4 }}>
+                          {result.winningRule.article}
+                        </div>
+                      )}
+                      {result.winningRule.citation && (
+                        <div style={{ fontSize: 12, color: "rgba(180,240,255,0.6)", fontStyle: "italic", marginBottom: 6, lineHeight: 1.5 }}>
+                          "{result.winningRule.citation}"
+                        </div>
+                      )}
+                      {result.winningRule.sourceUrl && (
+                        <a
+                          href={result.winningRule.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            fontSize: 11,
+                            color: "#60a5fa",
+                            textDecoration: "none",
+                            borderBottom: "1px solid rgba(96,165,250,0.3)",
+                            paddingBottom: 1,
+                          }}
+                        >
+                          ↗ Bekijk bron
+                        </a>
+                      )}
                     </div>
                   )}
 

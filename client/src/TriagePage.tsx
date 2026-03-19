@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Eye } from "lucide-react";
 
 type GateDecision =
@@ -13,6 +13,7 @@ type ScopeLite = {
   name: string;
   description?: string | null;
   status?: string | null;
+  orgName?: string | null;
   ingestMeta?: any;
 };
 
@@ -25,6 +26,7 @@ type ClassifyResponse = {
   reason: string | null;
   winningRule: any | null;
   signals: any | null;
+  onderbouwing?: string | null;
 };
 
 function badgeTone(decision: GateDecision) {
@@ -107,6 +109,19 @@ export default function TriagePage() {
     }
   }
 
+  const onAnalyzeRef = useCallback(onAnalyze, [text, selectedScopeId]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        onAnalyzeRef();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onAnalyzeRef]);
+
   return (
     <div>
       <div className="mb-6">
@@ -117,6 +132,7 @@ export default function TriagePage() {
         <p className="text-muted-foreground text-sm mt-1">
           Pre-governance classificatie met pluggable gate-profielen. Voer een intent in en het systeem classificeert, escaleert of blokkeert.
         </p>
+        <p className="text-xs text-primary/50 mt-1 font-mono">⌘Enter om te analyseren</p>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
@@ -128,8 +144,8 @@ export default function TriagePage() {
           className="h-8 rounded-md border border-input bg-background px-3 text-xs font-mono"
           disabled={loadingScope}
         >
-          {scopes.map(s => (
-            <option key={s.id} value={s.id}>{s.name} {s.status ? `(${s.status})` : ""}</option>
+          {scopes.filter(s => s.status === "LOCKED").map(s => (
+            <option key={s.id} value={s.id}>{s.orgName ? `${s.orgName} — ` : ""}{s.name} {s.status ? `(${s.status})` : ""}</option>
           ))}
         </select>
         {selectedScope && (
@@ -317,6 +333,26 @@ export default function TriagePage() {
                     )}
                     <div data-testid="text-reason" style={{ marginTop: 6, fontSize: 13, color: tone.fg, opacity: 0.9, lineHeight: 1.45 }}>
                       {result.reason}
+                    </div>
+                  </div>
+                )}
+
+                {result.onderbouwing && (
+                  <div
+                    data-testid="onderbouwing-block"
+                    style={{
+                      marginTop: 10,
+                      padding: 12,
+                      borderRadius: 12,
+                      border: "1px solid rgba(96,165,250,0.2)",
+                      background: "rgba(96,165,250,0.05)",
+                    }}
+                  >
+                    <div style={{ fontSize: 11, opacity: 0.6, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+                      Onderbouwing (Perplexity)
+                    </div>
+                    <div style={{ fontSize: 13, color: "#c4dff6", lineHeight: 1.5 }}>
+                      {result.onderbouwing}
                     </div>
                   </div>
                 )}

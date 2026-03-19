@@ -1,0 +1,39 @@
+{
+  "root": true,
+  "env": {
+    "es2022": true,
+    "node": true
+  },
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["server/*/!(index)", "server/*/*/!(index)"],
+            "message": "Importeer alleen via de publieke index van een subsysteem (bijv. 'server/trace', niet 'server/trace/hypatia')."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["server/*/index.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["**/__tests__/**/*.ts", "**/*.test.ts", "**/*.spec.ts"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}
