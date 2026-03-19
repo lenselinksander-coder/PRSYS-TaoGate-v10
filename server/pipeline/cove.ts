@@ -17,8 +17,8 @@
 
 import type { CoVeResult } from "./types";
 import { latticeMax, normaliseDecision } from "./types";
-import { hypatiaRisk } from "../trace/hypatia";
-import { runEuLegalGate } from "../core/euLegalGate";
+import { hypatiaRisk } from "../trace";
+import { runEuLegalGate } from "../core";
 import { evaluateArachne } from "./arachne";
 
 // I6: evaluators zijn hardcoded — structureel ≠ producenten (Cerberus, Olympia, Phronesis)
