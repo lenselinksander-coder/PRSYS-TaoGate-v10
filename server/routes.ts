@@ -1,9 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+
 import { z } from "zod";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { insertObservationSchema, insertScopeSchema, insertOrganizationSchema, gateProfiles } from "@shared/schema";
+import type { ScopeMeta } from "@shared/schema";
 import { getTapeDeck, executeTaoGate, runEuLegalGate, formatEuBlockAsGateResponse, EU_BASELINE_SCOPE } from "./core";
 import { researchTopic, extractScopeFromResearch } from "./perplexity";
 import { repairPdfJson, extractJsonObject, structurePdfText } from "./services/pdfParser";
@@ -452,44 +454,105 @@ export async function registerRoutes(
     }
   });
 
+  // ── Dataset Import (CSV/JSON → Scope) ────────────────────
+  //
+  // Accepts two equivalent formats:
+  //   A) Legacy nested:  { orgId, name, data: { categories, rules, documents } }
+  //   B) CoVe / TaoGate v10 root-level: { orgId, name, categories, rules, documents, scope_meta }
+  //
+  // When both are present, root-level wins if non-empty (CoVe takes precedence).
+
+  const _importCategorySchema = z.object({
+    name: z.string(),
+    label: z.string(),
+    status: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
+    escalation: z.string().nullable().optional().default(null),
+    keywords: z.array(z.string()).optional().default([]),
+  });
+
+  const _importRuleSchema = z.object({
+    ruleId: z.string(),
+    layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
+    domain: z.string(),
+    title: z.string(),
+    description: z.string(),
+    action: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
+    overridesLowerLayers: z.boolean().optional().default(false),
+    source: z.string().optional().default(""),
+    sourceUrl: z.string().optional().default(""),
+    article: z.string().optional().default(""),
+    citation: z.string().optional().default(""),
+    qTriad: z.enum(["Mens×Mens", "Mens×Systeem", "Systeem×Systeem"]).optional(),
+  });
+
+  const _importDocSchema = z.object({
+    type: z.enum(["visiedocument", "mandaat", "huisregel", "protocol", "overig"]),
+    title: z.string(),
+    content: z.string(),
+  });
+
+  const _importScopeMetaSchema = z.object({
+    ti_min: z.number().optional(),
+    sector_threshold: z.number().optional(),
+    ti_weights: z.object({ alpha: z.number(), beta: z.number(), gamma: z.number() }).optional(),
+    gate_profile: z.string().optional(),
+  }).optional();
+
   const importJsonSchema = z.object({
     orgId: z.string(),
     name: z.string().min(1),
     description: z.string().optional(),
+    // CoVe / TaoGate v10 root-level format
+    categories: z.array(_importCategorySchema).optional().default([]),
+    rules: z.array(_importRuleSchema).optional().default([]),
+    documents: z.array(_importDocSchema).optional().default([]),
+    scope_meta: _importScopeMetaSchema,
+    // Legacy nested format (still accepted)
     data: z.object({
-      categories: z.array(z.object({
-        name: z.string(), label: z.string(),
-        status: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
-        escalation: z.string().nullable().optional().default(null),
-        keywords: z.array(z.string()).optional().default([]),
-      })).optional().default([]),
-      rules: z.array(z.object({
-        ruleId: z.string(), layer: z.enum(["EU", "NATIONAL", "REGIONAL", "MUNICIPAL"]),
-        domain: z.string(), title: z.string(), description: z.string(),
-        action: z.enum(["PASS", "PASS_WITH_TRANSPARENCY", "ESCALATE_HUMAN", "ESCALATE_REGULATORY", "BLOCK"]),
-        overridesLowerLayers: z.boolean().optional().default(false),
-        source: z.string().optional().default(""), sourceUrl: z.string().optional().default(""),
-        article: z.string().optional().default(""), citation: z.string().optional().default(""),
-        qTriad: z.enum(["Mens×Mens", "Mens×Systeem", "Systeem×Systeem"]).optional(),
-      })).optional().default([]),
-      documents: z.array(z.object({
-        type: z.enum(["visiedocument", "mandaat", "huisregel", "protocol", "overig"]),
-        title: z.string(), content: z.string(),
-      })).optional().default([]),
-    }),
+      categories: z.array(_importCategorySchema).optional().default([]),
+      rules: z.array(_importRuleSchema).optional().default([]),
+      documents: z.array(_importDocSchema).optional().default([]),
+    }).optional(),
   });
 
   app.post("/api/import/json", async (req, res) => {
     const parsed = importJsonSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const { orgId, name, description, data } = parsed.data;
+      const { orgId, name, description, data, scope_meta } = parsed.data;
+
+      // Merge: root-level arrays win when non-empty (CoVe format), else fall back to data.*
+      const categories = parsed.data.categories.length ? parsed.data.categories : (data?.categories ?? []);
+      const rules = parsed.data.rules.length ? parsed.data.rules : (data?.rules ?? []);
+      const documents = parsed.data.documents.length ? parsed.data.documents : (data?.documents ?? []);
+
       const org = await storage.getOrganization(orgId);
       if (!org) return res.status(404).json({ error: "Organisatie niet gevonden" });
+
+      // Map snake_case scope_meta keys to camelCase schema
+      const scopeMetaMapped: ScopeMeta | undefined = scope_meta ? {
+        tiMin: scope_meta.ti_min,
+        sectorThreshold: scope_meta.sector_threshold,
+        tiWeights: scope_meta.ti_weights,
+        gateProfile: scope_meta.gate_profile,
+      } : undefined;
+
       const scope = await storage.createScope({
-        name, description: description || `Geïmporteerd dataset voor ${org.name}`, status: "DRAFT", orgId,
-        categories: data.categories, rules: data.rules, documents: data.documents,
-        ingestMeta: { query: `Import: ${name}`, citations: [], researchedAt: new Date().toISOString(), model: "import-json", gaps: [] },
+        name,
+        description: description || `Geïmporteerd dataset voor ${org.name}`,
+        status: "DRAFT",
+        orgId,
+        categories,
+        rules,
+        documents,
+        scopeMeta: scopeMetaMapped,
+        ingestMeta: {
+          query: `Import: ${name}`,
+          citations: [],
+          researchedAt: new Date().toISOString(),
+          model: "import-json",
+          gaps: [],
+        },
       });
       return res.status(201).json(scope);
     } catch (err: any) {
