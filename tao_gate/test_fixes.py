@@ -21,7 +21,7 @@ import unittest
 from dataclasses import dataclass
 from unittest.mock import patch
 
-from tao_gate.gdpr_bridge import DecisionResult, GdprDecision
+from tao_gate.gdpr_bridge import DecisionResult, GdprDecision, india_pdp_check
 from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.state import GateParams, Mode, State, instability, omega_capacity
 from tao_gate.supervisor import explain_decision, tao_gate_decide
@@ -652,6 +652,137 @@ class TestSystemCheck(unittest.TestCase):
             timestamp="2026-01-01T00:00:00+00:00",
         )
         self.assertEqual(report.overall, "FAIL")
+
+
+_INDIA_DPDPA_PASS = DecisionResult(
+    decision=GdprDecision.PASS,
+    escalate=False,
+    reason="ok",
+    scope="INDIA_DPDPA",
+    canon_level="INFORMATIONAL",
+)
+_INDIA_DPDPA_STOP = DecisionResult(
+    decision=GdprDecision.STOP,
+    escalate=True,
+    reason="India DPDPA constraint triggered.",
+    scope="INDIA_DPDPA_S7",
+    canon_level="CRITICAL",
+)
+
+
+class TestIndiaPdpGate(unittest.TestCase):
+    """India Digital Personal Data Protection Act 2023 (DPDPA) gate."""
+
+    # ── supervisor integration ────────────────────────────────────────────────
+
+    def test_india_pdpa_stop_forces_block(self) -> None:
+        """DPDPA STOP must unconditionally produce BLOCK in the supervisor."""
+        mode = tao_gate_decide(_HEALTHY_STATE, True, gdpr_result=_INDIA_DPDPA_STOP)
+        self.assertEqual(mode, Mode.BLOCK)
+
+    def test_india_pdpa_pass_allows_pass(self) -> None:
+        """DPDPA PASS on a healthy state must not impede PASS."""
+        mode = tao_gate_decide(_HEALTHY_STATE, True, gdpr_result=_INDIA_DPDPA_PASS)
+        self.assertEqual(mode, Mode.PASS)
+
+    def test_india_pdpa_stop_overrides_legitimacy(self) -> None:
+        """DPDPA STOP must produce BLOCK even when legitimacy_ok is True."""
+        mode = tao_gate_decide(_HEALTHY_STATE, True, gdpr_result=_INDIA_DPDPA_STOP)
+        self.assertEqual(mode, Mode.BLOCK)
+
+    # ── india_pdp_check — S.7 (sensitive data) ───────────────────────────────
+
+    def test_s7_sensitive_health_data_without_consent_blocks(self) -> None:
+        """S.7: sharing health data without consent must return STOP."""
+        result = india_pdp_check({
+            "actie": "deel_dossier",
+            "data_categorie": "gezondheid",
+            "toestemming_geverifieerd": False,
+        })
+        self.assertEqual(result.decision, GdprDecision.STOP)
+        self.assertTrue(result.escalate)
+        self.assertIn("INDIA", result.scope)
+        self.assertEqual(result.canon_level, "CRITICAL")
+
+    def test_s7_sensitive_biometric_data_without_consent_blocks(self) -> None:
+        """S.7: sharing biometric data without consent must return STOP."""
+        result = india_pdp_check({
+            "actie": "deel_dossier",
+            "data_categorie": "biometrisch",
+            "toestemming_geverifieerd": False,
+        })
+        self.assertEqual(result.decision, GdprDecision.STOP)
+        self.assertIn("INDIA", result.scope)
+
+    def test_s7_sensitive_financial_data_without_consent_blocks(self) -> None:
+        """S.7: sharing financial data without consent must return STOP."""
+        result = india_pdp_check({
+            "actie": "deel_dossier",
+            "data_categorie": "financieel",
+            "toestemming_geverifieerd": False,
+        })
+        self.assertEqual(result.decision, GdprDecision.STOP)
+        self.assertIn("INDIA", result.scope)
+
+    def test_s7_sensitive_data_with_consent_passes(self) -> None:
+        """S.7: sharing health data WITH verified consent must return PASS."""
+        result = india_pdp_check({
+            "actie": "deel_dossier",
+            "data_categorie": "gezondheid",
+            "toestemming_geverifieerd": True,
+        })
+        self.assertEqual(result.decision, GdprDecision.PASS)
+        self.assertFalse(result.escalate)
+        self.assertIn("INDIA", result.scope)
+
+    def test_s7_non_sensitive_data_passes(self) -> None:
+        """Non-sensitive data categories are not restricted under S.7."""
+        result = india_pdp_check({
+            "actie": "deel_dossier",
+            "data_categorie": "adres",
+            "toestemming_geverifieerd": False,
+        })
+        self.assertEqual(result.decision, GdprDecision.PASS)
+
+    # ── india_pdp_check — S.9 (children's data) ──────────────────────────────
+
+    def test_s9_child_data_without_consent_blocks(self) -> None:
+        """S.9: processing data of a child (< 18) without consent must STOP."""
+        result = india_pdp_check({
+            "patient_leeftijd": 15,
+            "toestemming_geverifieerd": False,
+        })
+        self.assertEqual(result.decision, GdprDecision.STOP)
+        self.assertTrue(result.escalate)
+        self.assertIn("INDIA", result.scope)
+
+    def test_s9_child_data_with_consent_passes(self) -> None:
+        """S.9: processing data of a child WITH verifiable consent must PASS."""
+        result = india_pdp_check({
+            "patient_leeftijd": 14,
+            "toestemming_geverifieerd": True,
+        })
+        self.assertEqual(result.decision, GdprDecision.PASS)
+
+    def test_s9_adult_data_without_consent_passes_s9(self) -> None:
+        """S.9 does not apply to adults (>= 18); S.7 governs sensitive data."""
+        result = india_pdp_check({
+            "patient_leeftijd": 18,
+            "toestemming_geverifieerd": False,
+            "data_categorie": "adres",
+        })
+        self.assertEqual(result.decision, GdprDecision.PASS)
+
+    # ── fail-safe ─────────────────────────────────────────────────────────────
+
+    def test_india_gate_exception_is_fail_safe(self) -> None:
+        """IndiaPrivacyGate exception must produce STOP (fail-safe)."""
+        with patch("tao_gate.gdpr_bridge.IndiaPrivacyGate") as MockGate:
+            MockGate.return_value.evaluate.side_effect = RuntimeError("boom")
+            result = india_pdp_check({})
+        self.assertEqual(result.decision, GdprDecision.STOP)
+        self.assertTrue(result.escalate)
+        self.assertIn("INDIA", result.scope)
 
 
 # ── Runner ────────────────────────────────────────────────────────────────────
