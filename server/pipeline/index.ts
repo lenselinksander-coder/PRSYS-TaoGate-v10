@@ -248,6 +248,22 @@ export async function classifyIntent(text: string, scopeId: string): Promise<any
           onderbouwing: onderbouwing || null,
         };
       }
+    } else {
+      // Klinisch fail-safe (A10): API niet beschikbaar → nooit stil doorgaan voor CLINICAL profiel
+      return {
+        status: "ESCALATE_HUMAN",
+        rule_id: null,
+        olympia: "CLINICAL_API_UNAVAILABLE",
+        layer: "CLINICAL_SAFETY_NET",
+        pressure: "UNKNOWN",
+        escalation: "HUMAN_IC_TEAM",
+        reason: "Klinische drukanalyse niet beschikbaar (API onbereikbaar of sleutel ontbreekt) — fail-safe escalatie naar IC-team.",
+        winningRule: null,
+        signals: null,
+        lexiconSource: "internal",
+        lexiconDeterministic: "false",
+        onderbouwing: null,
+      };
     }
   }
 
@@ -304,6 +320,17 @@ export async function gatewayClassify(opts: {
     llmSignals = await evaluateImplicitPressure(text);
     if (llmSignals) {
       implicitPressureOverride = routeImplicitPressure(llmSignals);
+    } else {
+      // Klinisch fail-safe (A10): API niet beschikbaar → nooit stil doorgaan voor CLINICAL profiel
+      implicitPressureOverride = {
+        override: true,
+        status: "ESCALATE_HUMAN",
+        escalation: "HUMAN_IC_TEAM",
+        olympia: "CLINICAL_API_UNAVAILABLE",
+        layer: "CLINICAL_SAFETY_NET",
+        pressure: "UNKNOWN",
+        reason: "Klinische drukanalyse niet beschikbaar (API onbereikbaar of sleutel ontbreekt) — fail-safe escalatie naar IC-team.",
+      };
     }
   }
 
