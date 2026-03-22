@@ -96,7 +96,74 @@ class PrivacyGate(Gate):
         return {"status": "PASS"}
 
 
-# ─── 4. Pipeline Orchestrator ────────────────────────────────────────────────
+# ─── 4. IndiaPrivacyGate (DPDPA 2023) ───────────────────────────────────────
+
+class IndiaPrivacyGate(Gate):
+    """
+    Checks whether the AI intent violates India's Digital Personal Data
+    Protection Act 2023 (DPDPA).
+
+    Rules enforced:
+      - DPDPA S.7 : Processing of personal data requires a valid consent
+                    signal when no other legal ground applies.  Sharing
+                    health/sensitive data without verified consent is blocked.
+      - DPDPA S.9 : Processing personal data of a child (< 18 years) requires
+                    verifiable parental/guardian consent.
+
+    Intent-context keys consumed:
+      actie                    (str)  — e.g. "deel_dossier"
+      data_categorie           (str)  — e.g. "gezondheid", "biometrisch",
+                                        "financieel"
+      toestemming_geverifieerd (bool) — True when valid consent is on record
+      patient_leeftijd         (int)  — age of the data subject in years
+    """
+
+    _SENSITIVE_CATEGORIES = frozenset({"gezondheid", "biometrisch", "financieel"})
+
+    def evaluate(self, intent_context: dict[str, Any]) -> dict[str, Any]:
+        actie = intent_context.get("actie", "")
+        data_categorie = intent_context.get("data_categorie", "")
+        toestemming_geverifieerd = intent_context.get("toestemming_geverifieerd", False)
+        patient_leeftijd = intent_context.get("patient_leeftijd", 18)
+
+        # S.9 — children's data: verifiable parental consent required for < 18.
+        if patient_leeftijd < 18 and not toestemming_geverifieerd:
+            return {
+                "status": "ESCALATE_HUMAN",
+                "olympia": "INDIA_DPDPA_S9",
+                "layer": "PRIVACY",
+                "pressure": "CRITICAL",
+                "escalation": "DPO",
+                "reason": (
+                    "Processing personal data of a child (< 18) requires "
+                    "verifiable parental/guardian consent under India's "
+                    "Digital Personal Data Protection Act 2023, Section 9."
+                ),
+            }
+
+        # S.7 — sensitive personal data: explicit consent required.
+        if (
+            actie in ("deel_dossier", "verwerk_gezondheidsgegevens")
+            and data_categorie in self._SENSITIVE_CATEGORIES
+            and not toestemming_geverifieerd
+        ):
+            return {
+                "status": "ESCALATE_HUMAN",
+                "olympia": "INDIA_DPDPA_S7",
+                "layer": "PRIVACY",
+                "pressure": "CRITICAL",
+                "escalation": "DPO",
+                "reason": (
+                    "Processing sensitive personal data requires verified "
+                    "consent under India's Digital Personal Data Protection "
+                    "Act 2023, Section 7."
+                ),
+            }
+
+        return {"status": "PASS"}
+
+
+# ─── 5. Pipeline Orchestrator ────────────────────────────────────────────────
 
 class TaoGatePipeline:
     """

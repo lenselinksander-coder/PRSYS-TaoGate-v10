@@ -16,7 +16,7 @@ All logic is pure Python (stdlib only), deterministic and side-effect free.
 
 from tao_gate.state import Mode, State
 from tao_gate.supervisor import tao_gate_decide
-from tao_gate.gdpr_bridge import GdprDecision, gdpr_personal_data_check
+from tao_gate.gdpr_bridge import GdprDecision, gdpr_personal_data_check, india_pdp_check
 from tao_gate.inuit import InuitSignal, inuit_context_check
 from tao_gate.dymphna import DymphnaSignal, dymphna_check
 from tao_gate.valkyrie import (
@@ -34,6 +34,7 @@ __all__ = [
     "tao_gate_decide",
     "GdprDecision",
     "gdpr_personal_data_check",
+    "india_pdp_check",
     "InuitSignal",
     "inuit_context_check",
     "DymphnaSignal",

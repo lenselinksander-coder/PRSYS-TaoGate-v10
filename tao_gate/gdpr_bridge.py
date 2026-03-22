@@ -25,7 +25,7 @@ _SERVER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ser
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
-from argos import PrivacyGate  # noqa: E402  (must follow sys.path setup)
+from argos import IndiaPrivacyGate, PrivacyGate  # noqa: E402  (must follow sys.path setup)
 
 
 class GdprDecision(str, Enum):
@@ -123,5 +123,68 @@ def gdpr_personal_data_check(intent_context: dict[str, Any]) -> DecisionResult:
         escalate=False,
         reason="No privacy constraint triggered.",
         scope="GDPR_PERSONAL_DATA",
+        canon_level="INFORMATIONAL",
+    )
+
+
+def india_pdp_check(intent_context: dict[str, Any]) -> DecisionResult:
+    """
+    Evaluate *intent_context* against India's Digital Personal Data Protection
+    Act 2023 (DPDPA).
+
+    Wraps :class:`IndiaPrivacyGate` from ``server/argos.py`` and normalises
+    its output into a typed :class:`DecisionResult`.
+
+    Parameters
+    ----------
+    intent_context : dict[str, Any]
+        Recognised keys::
+
+            {
+                "actie":                    str,   # e.g. "deel_dossier"
+                "data_categorie":           str,   # e.g. "gezondheid"
+                "toestemming_geverifieerd": bool,  # True when consent is on record
+                "patient_leeftijd":         int,   # age of the data subject
+            }
+
+    Returns
+    -------
+    DecisionResult
+        ``decision=STOP`` when the DPDPA requires blocking;
+        ``decision=PASS`` otherwise.
+
+    Notes
+    -----
+    Any unexpected exception raised by :class:`IndiaPrivacyGate` is treated
+    as a STOP (fail-safe): when the gate cannot be evaluated, execution must
+    not proceed.
+    """
+    try:
+        raw: dict[str, Any] = IndiaPrivacyGate().evaluate(intent_context)
+    except Exception as exc:  # noqa: BLE001
+        return DecisionResult(
+            decision=GdprDecision.STOP,
+            escalate=True,
+            reason=f"IndiaPrivacyGate evaluation failed unexpectedly: {exc}",
+            scope="INDIA_DPDPA",
+            canon_level="CRITICAL",
+        )
+
+    status = raw.get("status", "PASS")
+
+    if status != "PASS":
+        return DecisionResult(
+            decision=GdprDecision.STOP,
+            escalate=True,
+            reason=raw.get("reason", "India DPDPA constraint triggered."),
+            scope=raw.get("olympia", "INDIA_DPDPA"),
+            canon_level=raw.get("pressure", "CRITICAL"),
+        )
+
+    return DecisionResult(
+        decision=GdprDecision.PASS,
+        escalate=False,
+        reason="No India DPDPA constraint triggered.",
+        scope="INDIA_DPDPA",
         canon_level="INFORMATIONAL",
     )
