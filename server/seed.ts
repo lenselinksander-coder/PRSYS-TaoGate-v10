@@ -1,6 +1,299 @@
 import { storage } from "./storage";
 import type { ScopeRule } from "@shared/schema";
 
+// ─── India scope drempelwaarden ──────────────────────────────────────────────
+// Centraal gedefinieerd zodat aanpassingen op één plek doorgevoerd worden.
+export const INR_AUTO_APPROVE_THRESHOLD = 50_000;   // Auto-approve drempel (INR)
+export const INR_FMU_REPORT_THRESHOLD = 500_000;    // IRDAI FMU meldplicht drempel (INR 5 lakh)
+export const INDIA_SCOPE_NAME = "TaoGate Goes India";
+
+// ─── India scope regel-definities ────────────────────────────────────────────
+// Elke regel verwijst naar zijn wettelijke grondslag en afhankelijkheden.
+
+/**
+ * IRDAI_IIB_BLOCK
+ * Afhankelijkheden: IIB Cautionregister feed actief, IRDAI FMU meldplicht
+ * Grondslag: IRDAI FMU Circular IRDA/SDD/CIR/FRAUD/2013
+ */
+const INDIA_RULE_IIB_BLOCK: ScopeRule = {
+  ruleId: "IRDAI_IIB_BLOCK",
+  layer: "NATIONAL",
+  domain: "FRAUD",
+  title: "IIB Cautionregister — Escalatie Verplicht",
+  description: "Elke claim waarbij de verzekerde of het voertuig voorkomt in het IIB Cautionregister vereist verplichte escalatie naar IRDAI FMU.",
+  action: "ESCALATE_REGULATORY",
+  overridesLowerLayers: true,
+  source: "IIB / IRDAI",
+  article: "IRDAI FMU Circular 2013",
+};
+
+/**
+ * IRDAI_DUPLICATE_BLOCK
+ * Afhankelijkheden: deduplicatie-check op polisnummer + incident-ID
+ * Grondslag: IRDAI Anti-Fraud Policy Regulation 2013, Art. 7
+ */
+const INDIA_RULE_DUPLICATE_BLOCK: ScopeRule = {
+  ruleId: "IRDAI_DUPLICATE_BLOCK",
+  layer: "NATIONAL",
+  domain: "FRAUD",
+  title: "Duplicate Claims — Geblokkeerd",
+  description: "Duplicate claims (zelfde voertuig + zelfde incident op meerdere polissen) worden direct geblokkeerd en doorgestuurd naar de fraudeafdeling.",
+  action: "BLOCK",
+  overridesLowerLayers: true,
+  source: "IRDAI Anti-Fraud Policy",
+  article: "IRDAI Reg. 2013, Art. 7",
+};
+
+/**
+ * TAOGATE_AUTO_APPROVE
+ * Afhankelijkheden: geen IIB-hit, geen duplicate-signaal, polis actief
+ * Grondslag: TaoGate India Operations Board Mandaat v1.0
+ */
+const INDIA_RULE_AUTO_APPROVE: ScopeRule = {
+  ruleId: "TAOGATE_AUTO_APPROVE",
+  layer: "REGIONAL",
+  domain: "CLAIMS",
+  title: `Auto-Approve Drempel — Kleine Schades (≤ INR ${INR_AUTO_APPROVE_THRESHOLD.toLocaleString("nl-IN")})`,
+  description: `Claims tot INR ${INR_AUTO_APPROVE_THRESHOLD.toLocaleString("nl-IN")} zonder rode vlaggen worden automatisch goedgekeurd conform het TaoGate India Operations Mandaat.`,
+  action: "PASS",
+  overridesLowerLayers: false,
+  source: "TaoGate India Operations Board",
+  article: "Mandaat v1.0, §2",
+};
+
+/**
+ * IRDAI_INJURY_HUMAN
+ * Afhankelijkheden: aanwezigheid van letselschade of overlijden in claimgegevens
+ * Grondslag: IRDAI Motor Insurance Guidelines, Motor Tariff Art. 12
+ */
+const INDIA_RULE_INJURY_HUMAN: ScopeRule = {
+  ruleId: "IRDAI_INJURY_HUMAN",
+  layer: "NATIONAL",
+  domain: "CLAIMS",
+  title: "Letselschade — Menselijke Review Verplicht",
+  description: "Claims met bodily injury of fatality vereisen altijd menselijke beoordeling door een senior schade-expert, ongeacht claimwaarde.",
+  action: "ESCALATE_HUMAN",
+  overridesLowerLayers: true,
+  source: "IRDAI Motor Insurance Guidelines",
+  article: "IRDAI Motor Tariff, Art. 12",
+};
+
+/**
+ * IRDAI_FMU_REPORT
+ * Afhankelijkheden: georganiseerde fraude gedetecteerd (≥ 3 gerelateerde claims)
+ *   of claimwaarde boven INR_FMU_REPORT_THRESHOLD
+ * Grondslag: IRDAI Circular IRDA/SDD/CIR/FRAUD/2013
+ */
+const INDIA_RULE_FMU_REPORT: ScopeRule = {
+  ruleId: "IRDAI_FMU_REPORT",
+  layer: "NATIONAL",
+  domain: "FRAUD",
+  title: `IRDAI FMU Meldplicht (> INR ${INR_FMU_REPORT_THRESHOLD.toLocaleString("nl-IN")})`,
+  description: `Georganiseerde fraude en systeemfraude boven INR ${INR_FMU_REPORT_THRESHOLD.toLocaleString("nl-IN")} moeten worden gemeld bij IRDAI FMU binnen 7 werkdagen.`,
+  action: "ESCALATE_REGULATORY",
+  overridesLowerLayers: true,
+  source: "IRDAI",
+  article: "IRDA/SDD/CIR/FRAUD/2013",
+};
+
+/**
+ * TAOGATE_SOFT_FRAUD_REVIEW
+ * Afhankelijkheden: soft-fraud signalen zoals kostenmismatch of vertraagde melding
+ * Grondslag: TaoGate India Fraud Policy, Intern Protocol v2.1
+ */
+const INDIA_RULE_SOFT_FRAUD: ScopeRule = {
+  ruleId: "TAOGATE_SOFT_FRAUD_REVIEW",
+  layer: "REGIONAL",
+  domain: "FRAUD",
+  title: "Soft Fraud — Expert Review",
+  description: "Claims met indicatoren van overdrijving of staged accidents worden doorgestuurd naar een schade-expert voor nader onderzoek.",
+  action: "ESCALATE_HUMAN",
+  overridesLowerLayers: false,
+  source: "TaoGate India Fraud Policy",
+  article: "Intern Protocol v2.1",
+};
+
+export const indiaRules: ScopeRule[] = [
+  INDIA_RULE_IIB_BLOCK,
+  INDIA_RULE_DUPLICATE_BLOCK,
+  INDIA_RULE_AUTO_APPROVE,
+  INDIA_RULE_INJURY_HUMAN,
+  INDIA_RULE_FMU_REPORT,
+  INDIA_RULE_SOFT_FRAUD,
+];
+
+export async function seedIndiaScope() {
+  const orgs = await storage.getOrganizations();
+  let indiaOrg = orgs.find(o => o.slug === "taogate-india");
+  if (!indiaOrg) {
+    indiaOrg = await storage.createOrganization({
+      name: "TaoGate India",
+      slug: "taogate-india",
+      description: "Vehicle Insurance Fraud Triage — IRDAI/IIB governance scope voor de Indiase markt",
+      sector: "insurance",
+      gateProfile: "FRAUD_TRIAGE",
+    });
+  }
+
+  const existingScopes = await storage.getScopesByOrg(indiaOrg.id);
+  if (existingScopes.some(s => s.name === INDIA_SCOPE_NAME)) return;
+
+  await storage.createScope({
+    name: INDIA_SCOPE_NAME,
+    description: `Vehicle Insurance Fraud Triage Scope v1.0 — IRDAI FMU rapportage + IIB cautionregister + auto-approve drempel (≤ INR ${INR_AUTO_APPROVE_THRESHOLD.toLocaleString("nl-IN")})`,
+    status: "LOCKED",
+    orgId: indiaOrg.id,
+    categories: [
+      {
+        name: "IIB_CAUTIONREGISTER",
+        label: "IIB Cautionregister Treffer",
+        status: "ESCALATE_REGULATORY",
+        // Treffers op het IIB-register leiden altijd tot IRDAI-escalatie (zie IRDAI_IIB_BLOCK)
+        keywords: [
+          "cautionlist", "iib", "blacklist treffer", "cautionregister",
+          "fraud history", "previous fraud", "iib hit", "iib match",
+          "known fraudster", "eerder fraude", "gemarkeerde verzekerde",
+        ],
+        escalation: "IRDAI FMU / IIB Compliance",
+      },
+      {
+        name: "DUPLICATE_CLAIM",
+        label: "Duplicate Claim / Dubbele Aanvraag",
+        status: "BLOCK",
+        // Directe BLOCK zonder escalatie-mogelijkheid (zie IRDAI_DUPLICATE_BLOCK)
+        keywords: [
+          "duplicate claim", "dubbele claim", "already claimed", "al ingediend",
+          "multiple policies same incident", "meerdere polissen zelfde incident",
+          "overlapping claim", "previously settled", "reeds vergoed",
+          "duplicate registration", "same vehicle same date",
+        ],
+        escalation: "Fraudeafdeling",
+      },
+      {
+        name: "SOFT_FRAUD",
+        label: "Soft Fraud / Overdrijving",
+        status: "ESCALATE_HUMAN",
+        // Expert review vereist; geen BLOCK tenzij IIB-hit of duplicate (zie TAOGATE_SOFT_FRAUD_REVIEW)
+        keywords: [
+          "overdrijving", "exaggeration", "inflated repair cost", "opgeklopte reparatie",
+          "staged accident", "geënsceneerde aanrijding", "neppe schade",
+          "fake damage", "repair invoice mismatch", "inconsistente verklaring",
+          "inconsistent statement", "getuige onbekend", "unknown witness",
+          "delayed reporting", "te laat gemeld", "no police report",
+        ],
+        escalation: "Schade-expert / Investigatie",
+      },
+      {
+        name: "AUTO_APPROVE",
+        label: `Standaard Schade (≤ INR ${INR_AUTO_APPROVE_THRESHOLD.toLocaleString("nl-IN")})`,
+        status: "PASS",
+        // Alleen PASS als er geen IIB-hit, duplicate of soft-fraud signaal is (zie TAOGATE_AUTO_APPROVE)
+        keywords: [
+          "minor damage", "kleine schade", "windshield", "voorruit", "fender bender",
+          "lichte aanrijding", "third party minor", "under threshold", "onder drempel",
+          "standard claim", "standaard claim", "no injury", "geen letsel",
+          "clean history",
+        ],
+        escalation: null,
+      },
+      {
+        name: "COMPLEX_INVESTIGATION",
+        label: "Complexe Schade / Onderzoek Vereist",
+        status: "ESCALATE_HUMAN",
+        // Senior expert vereist; letsel altijd ESCALATE_HUMAN ongeacht bedrag (zie IRDAI_INJURY_HUMAN)
+        keywords: [
+          "total loss", "totaal verlies", "bodily injury", "letselschade",
+          "fatality", "dodelijk", "theft", "diefstal", "fire damage", "brandschade",
+          "flood damage", "waterschade", "natural disaster", "natuurramp",
+          "high value claim", "hoge claim waarde", "commercial vehicle", "bedrijfsvoertuig",
+          "disputed liability", "aansprakelijkheid betwist",
+        ],
+        escalation: "Senior Schade-expert",
+      },
+      {
+        name: "IRDAI_REPORTING",
+        label: "IRDAI Meldplicht Drempel",
+        status: "ESCALATE_REGULATORY",
+        // Meldplicht actief boven INR_FMU_REPORT_THRESHOLD of bij georganiseerde fraude (zie IRDAI_FMU_REPORT)
+        keywords: [
+          "irdai threshold", "fmu reporting", "regulatory report", "mandatory disclosure",
+          "meldplichtige fraude", "irdai fmu", "fraud management unit",
+          "suspicious activity report", "sar insurance", "systemic fraud",
+          "organised fraud ring", "georganiseerde fraudering",
+        ],
+        escalation: "IRDAI FMU",
+      },
+    ],
+    documents: [
+      {
+        type: "visiedocument",
+        title: `${INDIA_SCOPE_NAME} — Vehicle Insurance Fraud Triage Scope v1.0`,
+        content: `## Visie
+TaoGate India hanteert een gelaagde triage-aanpak voor vehicle insurance claims op de Indiase markt.
+Elk claim doorloopt een geautomatiseerde gate-check op basis van IIB cautionregister, IRDAI FMU-drempels en interne fraudepatronen.
+
+## Kernprincipes
+- Auto-approve onder de drempel (standaard schades ≤ INR ${INR_AUTO_APPROVE_THRESHOLD.toLocaleString("nl-IN")})
+- IIB cautionregister-hits leiden altijd tot IRDAI-escalatie
+- Menselijke review verplicht bij letsel, diefstal en total loss
+- IRDAI FMU-rapportage bij georganiseerde fraude of systeemfraude
+
+## Scope
+Vehicle insurance (motorvoertuigen) op de Indiase markt, onder toezicht van IRDAI.`,
+      },
+      {
+        type: "mandaat",
+        title: "Mandaat — TaoGate Auto-Approve Drempel India",
+        content: `## Mandaat Auto-Approve
+
+### Drempelwaarde
+Claims tot en met **INR ${INR_AUTO_APPROVE_THRESHOLD.toLocaleString("nl-IN")}** zonder rode vlaggen worden automatisch goedgekeurd door TaoGate.
+
+### Voorwaarden voor auto-approve
+1. Geen IIB cautionregister-hit op verzekerde of voertuig
+2. Geen duplicate claim signaal
+3. Schade valt in categorie PASS (kleine schade, geen letsel)
+4. Polis actief en premie betaald
+
+### Uitzonderingen
+- Altijd menselijke review bij letsel (ongeacht bedrag)
+- Altijd menselijke review bij total loss
+- Bij twijfel: escaleer naar schade-expert
+
+**Geldig vanaf:** 2024-01-01
+**Bevoegd door:** TaoGate India Operations Board`,
+      },
+      {
+        type: "protocol",
+        title: "Protocol — IRDAI FMU Escalatie & Frauderapportage",
+        content: `## IRDAI FMU Escalatieprotocol
+
+### 1. Meldplicht
+Conform IRDAI (Protection of Policyholders' Interests) Regulations is elke verzekeraar verplicht vermoedens van verzekeringsfraude te melden bij de Fraud Management Unit (FMU) van IRDAI.
+
+### 2. Drempels voor verplichte melding
+- Georganiseerde fraude (meer dan 3 gerelateerde claims)
+- Totale fraudewaarde > INR ${INR_FMU_REPORT_THRESHOLD.toLocaleString("nl-IN")}
+- IIB cautionregister-hit gecombineerd met actieve claim
+
+### 3. Escalatieprocedure
+1. TaoGate genereert ESCALATE_REGULATORY beslissing
+2. Compliance officer ontvangt notificatie binnen 24 uur
+3. FMU-rapport ingediend binnen 7 werkdagen
+4. IIB-update na bevestiging fraude
+
+### 4. Documentatie
+Alle escalaties worden vastgelegd in het WORM-auditlog van TaoGate.
+
+**Referentie:** IRDAI Circular No. IRDA/SDD/CIR/FRAUD/2013
+**Versie:** 2.1`,
+      },
+    ],
+    rules: indiaRules,
+    isDefault: null,
+  });
+}
+
 const defaultRules: ScopeRule[] = [
   {
     ruleId: "EU_AI_ART_5",
