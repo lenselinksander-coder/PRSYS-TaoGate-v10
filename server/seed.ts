@@ -1,5 +1,238 @@
 import { storage } from "./storage";
 
+export async function seedIndiaScope() {
+  const orgs = await storage.getOrganizations();
+  let indiaOrg = orgs.find(o => o.slug === "taogate-india");
+  if (!indiaOrg) {
+    indiaOrg = await storage.createOrganization({
+      name: "TaoGate India",
+      slug: "taogate-india",
+      description: "Vehicle Insurance Fraud Triage — IRDAI/IIB governance scope voor de Indiase markt",
+      sector: "insurance",
+      gateProfile: "FRAUD_TRIAGE",
+    });
+  }
+
+  const existingScopes = await storage.getScopesByOrg(indiaOrg.id);
+  if (existingScopes.some(s => s.name === "TaoGate Goes India")) return;
+
+  await storage.createScope({
+    name: "TaoGate Goes India",
+    description: "Vehicle Insurance Fraud Triage Scope v1.0 — IRDAI FMU rapportage + IIB cautionregister + auto-approve drempel",
+    status: "LOCKED",
+    orgId: indiaOrg.id,
+    categories: [
+      {
+        name: "IIB_CAUTIONREGISTER",
+        label: "IIB Cautionregister Treffer",
+        status: "ESCALATE_REGULATORY",
+        keywords: [
+          "cautionlist", "iib", "blacklist treffer", "cautionregister", "fraud history",
+          "previous fraud", "fraudeur", "fraud register", "iib hit", "iib match",
+          "known fraudster", "eerder fraude", "gemarkeerde verzekerde",
+        ],
+        escalation: "IRDAI FMU / IIB Compliance",
+      },
+      {
+        name: "DUPLICATE_CLAIM",
+        label: "Duplicate Claim / Dubbele Aanvraag",
+        status: "BLOCK",
+        keywords: [
+          "duplicate claim", "dubbele claim", "already claimed", "al ingediend",
+          "multiple policies same incident", "meerdere polissen zelfde incident",
+          "overlapping claim", "previously settled", "reeds vergoed",
+          "duplicate registration", "same vehicle same date",
+        ],
+        escalation: "Fraudeafdeling",
+      },
+      {
+        name: "SOFT_FRAUD",
+        label: "Soft Fraud / Overdrijving",
+        status: "ESCALATE_HUMAN",
+        keywords: [
+          "overdrijving", "exaggeration", "inflated repair cost", "opgeklopte reparatie",
+          "staged accident", "geënsceneerde aanrijding", "neppe schade",
+          "fake damage", "repair invoice mismatch", "inconsistente verklaring",
+          "inconsistent statement", "getuige onbekend", "unknown witness",
+          "delayed reporting", "te laat gemeld", "no police report",
+        ],
+        escalation: "Schade-expert / Investigatie",
+      },
+      {
+        name: "AUTO_APPROVE",
+        label: "Standaard Schade (Onder Drempel)",
+        status: "PASS",
+        keywords: [
+          "minor damage", "kleine schade", "windshield", "voorruit", "fender bender",
+          "lichte aanrijding", "third party minor", "under threshold", "onder drempel",
+          "standard claim", "standaard claim", "no injury", "geen letsel",
+          "clean history", "schone history",
+        ],
+        escalation: null,
+      },
+      {
+        name: "COMPLEX_INVESTIGATION",
+        label: "Complexe Schade / Onderzoek Vereist",
+        status: "ESCALATE_HUMAN",
+        keywords: [
+          "total loss", "totaal verlies", "bodily injury", "letselschade",
+          "fatality", "dodelijk", "theft", "diefstal", "fire damage", "brandschade",
+          "flood damage", "waterschade", "natural disaster", "natuurramp",
+          "high value claim", "hoge claim waarde", "commercial vehicle", "bedrijfsvoertuig",
+          "disputed liability", "aansprakelijkheid betwist",
+        ],
+        escalation: "Senior Schade-expert",
+      },
+      {
+        name: "IRDAI_REPORTING",
+        label: "IRDAI Meldplicht Drempel",
+        status: "ESCALATE_REGULATORY",
+        keywords: [
+          "irdai threshold", "fmu reporting", "regulatory report", "mandatory disclosure",
+          "meldplichtige fraude", "irdai fmu", "fraud management unit",
+          "suspicious activity report", "sar insurance", "systemic fraud",
+          "organised fraud ring", "georganiseerde fraudering",
+        ],
+        escalation: "IRDAI FMU",
+      },
+    ],
+    documents: [
+      {
+        type: "visiedocument",
+        title: "TaoGate Goes India — Vehicle Insurance Fraud Triage Scope v1.0",
+        content: `## Visie
+TaoGate India hanteert een gelaagde triage-aanpak voor vehicle insurance claims op de Indiase markt.
+Elk claim doorloopt een geautomatiseerde gate-check op basis van IIB cautionregister, IRDAI FMU-drempels en interne fraudepatronen.
+
+## Kernprincipes
+- Auto-approve onder de drempel (standaard schades < INR 50.000)
+- IIB cautionregister-hits leiden altijd tot IRDAI-escalatie
+- Menselijke review verplicht bij letsel, diefstal en total loss
+- IRDAI FMU-rapportage bij georganiseerde fraude of systeemfraude
+
+## Scope
+Vehicle insurance (motorvoertuigen) op de Indiase markt, onder toezicht van IRDAI.`,
+      },
+      {
+        type: "mandaat",
+        title: "Mandaat — TaoGate Auto-Approve Drempel India",
+        content: `## Mandaat Auto-Approve
+
+### Drempelwaarde
+Claims tot en met **INR 50.000** zonder rode vlaggen worden automatisch goedgekeurd door TaoGate.
+
+### Voorwaarden voor auto-approve
+1. Geen IIB cautionregister-hit op verzekerde of voertuig
+2. Geen duplicate claim signaal
+3. Schade valt in categorie PASS (kleine schade, geen letsel)
+4. Polis actief en premie betaald
+
+### Uitzonderingen
+- Altijd menselijke review bij letsel (ongeacht bedrag)
+- Altijd menselijke review bij total loss
+- Bij twijfel: escaleer naar schade-expert
+
+**Geldig vanaf:** 2024-01-01
+**Bevoegd door:** TaoGate India Operations Board`,
+      },
+      {
+        type: "protocol",
+        title: "Protocol — IRDAI FMU Escalatie & Frauderapportage",
+        content: `## IRDAI FMU Escalatieprotocol
+
+### 1. Meldplicht
+Conform IRDAI (Protection of Policyholders' Interests) Regulations is elke verzekeraar verplicht vermoedens van verzekeringsfraude te melden bij de Fraud Management Unit (FMU) van IRDAI.
+
+### 2. Drempels voor verplichte melding
+- Georganiseerde fraude (meer dan 3 gerelateerde claims)
+- Totale fraudewaarde > INR 5 lakh
+- IIB cautionregister-hit gecombineerd met actieve claim
+
+### 3. Escalatieprocedure
+1. TaoGate genereert ESCALATE_REGULATORY beslissing
+2. Compliance officer ontvangt notificatie binnen 24 uur
+3. FMU-rapport ingediend binnen 7 werkdagen
+4. IIB-update na bevestiging fraude
+
+### 4. Documentatie
+Alle escalaties worden vastgelegd in het WORM-auditlog van TaoGate.
+
+**Referentie:** IRDAI Circular No. IRDA/SDD/CIR/FRAUD/2013
+**Versie:** 2.1`,
+      },
+    ],
+    rules: [
+      {
+        ruleId: "IRDAI_IIB_BLOCK",
+        layer: "NATIONAL",
+        domain: "FRAUD",
+        title: "IIB Cautionregister — Escalatie Verplicht",
+        description: "Elke claim waarbij de verzekerde of het voertuig voorkomt in het IIB Cautionregister vereist verplichte escalatie naar IRDAI FMU.",
+        action: "ESCALATE_REGULATORY",
+        overridesLowerLayers: true,
+        source: "IIB / IRDAI",
+        article: "IRDAI FMU Circular 2013",
+      },
+      {
+        ruleId: "IRDAI_DUPLICATE_BLOCK",
+        layer: "NATIONAL",
+        domain: "FRAUD",
+        title: "Duplicate Claims — Geblokkeerd",
+        description: "Duplicate claims (zelfde voertuig + zelfde incident op meerdere polissen) worden direct geblokkeerd en doorgestuurd naar de fraudeafdeling.",
+        action: "BLOCK",
+        overridesLowerLayers: true,
+        source: "IRDAI Anti-Fraud Policy",
+        article: "IRDAI Reg. 2013, Art. 7",
+      },
+      {
+        ruleId: "TAOGATE_AUTO_APPROVE",
+        layer: "REGIONAL",
+        domain: "CLAIMS",
+        title: "Auto-Approve Drempel — Kleine Schades",
+        description: "Claims tot INR 50.000 zonder rode vlaggen worden automatisch goedgekeurd conform het TaoGate India Operations Mandaat.",
+        action: "PASS",
+        overridesLowerLayers: false,
+        source: "TaoGate India Operations Board",
+        article: "Mandaat v1.0, §2",
+      },
+      {
+        ruleId: "IRDAI_INJURY_HUMAN",
+        layer: "NATIONAL",
+        domain: "CLAIMS",
+        title: "Letselschade — Menselijke Review Verplicht",
+        description: "Claims met bodily injury of fatality vereisen altijd menselijke beoordeling door een senior schade-expert, ongeacht claimwaarde.",
+        action: "ESCALATE_HUMAN",
+        overridesLowerLayers: true,
+        source: "IRDAI Motor Insurance Guidelines",
+        article: "IRDAI Motor Tariff, Art. 12",
+      },
+      {
+        ruleId: "IRDAI_FMU_REPORT",
+        layer: "NATIONAL",
+        domain: "FRAUD",
+        title: "IRDAI FMU Meldplicht",
+        description: "Georganiseerde fraude en systeemfraude boven INR 5 lakh moeten worden gemeld bij IRDAI FMU binnen 7 werkdagen.",
+        action: "ESCALATE_REGULATORY",
+        overridesLowerLayers: true,
+        source: "IRDAI",
+        article: "IRDA/SDD/CIR/FRAUD/2013",
+      },
+      {
+        ruleId: "TAOGATE_SOFT_FRAUD_REVIEW",
+        layer: "REGIONAL",
+        domain: "FRAUD",
+        title: "Soft Fraud — Expert Review",
+        description: "Claims met indicatoren van overdrijving of staged accidents worden doorgestuurd naar een schade-expert voor nader onderzoek.",
+        action: "ESCALATE_HUMAN",
+        overridesLowerLayers: false,
+        source: "TaoGate India Fraud Policy",
+        article: "Intern Protocol v2.1",
+      },
+    ],
+    isDefault: null,
+  });
+}
+
 export async function seedDefaultScopes() {
   const existing = await storage.getDefaultScope();
   if (existing) return;

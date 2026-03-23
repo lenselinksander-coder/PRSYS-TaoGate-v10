@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { seedDefaultScopes } from "./seed";
+import { seedDefaultScopes, seedIndiaScope } from "./seed";
 import { initWormChain } from "./audit/wormChain";
 
 const app = express();
@@ -64,6 +64,7 @@ app.use((req, res, next) => {
 (async () => {
   await registerRoutes(httpServer, app);
   await seedDefaultScopes();
+  await seedIndiaScope();
   // Feature 2: WORM audit chain — seed prevHash from last S3 entry.
   // No-op if WORM_S3_BUCKET env var is not set.
   await initWormChain();
