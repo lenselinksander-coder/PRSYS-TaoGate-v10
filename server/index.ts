@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { seedDefaultScopes } from "./seed";
+import { seedDefaultScopes, seedIndiaScope } from "./seed";
 import { initWormChain } from "./audit/wormChain";
 import { bootstrapTapeDeck } from "./core/init";
 import { bootstrapTRST } from "./core/trst";
@@ -77,6 +77,11 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
   await seedDefaultScopes();
+  try {
+    await seedIndiaScope();
+  } catch (err) {
+    console.error("[seed] seedIndiaScope mislukt — applicatie start normaal door:", err);
+  }
   await initWormChain();
   bootstrapTRST();
   bootstrapTapeDeck();
