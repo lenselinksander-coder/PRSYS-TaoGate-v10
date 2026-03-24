@@ -1,5 +1,7 @@
 import { clinicalGate, type ClinicalGateResult } from "./clinicalGate";
 import type { GateProfile } from "@shared/schema";
+import { getTapeDeck, executeTaoGate, runEuLegalGate } from "./core";
+import { appendWormEntry } from "./audit/wormChain";
 
 // Feature 1: WASM sandbox — re-exported for use by the FSM and routes.
 // runGateWasm runs the gate logic inside a hermetic QuickJS WASM VM with
@@ -338,4 +340,204 @@ export function getGateProfileDescription(profile: GateProfile): string {
     CUSTOM: "Aangepast gate-profiel — standaard algemene filtering, uitbreidbaar per organisatie.",
   };
   return descriptions[profile];
+}
+
+// ── executeWithGate — Governance enforcement voor configuratie-endpoints ──────
+// Alle configuratie-mutaties (scope, organisatie, connector, import) lopen via
+// deze functie. Garandeert dat de governance-kern ook intern geldt — niet alleen
+// op de externe API-grens (Invariant I5: Runtime ≠ DB-write zonder gate).
+//
+// Volgorde conform TRST-laagorde (EN-2026-002):
+//   1. EU Legal Gate (euLegalGate.ts) — terminaal bij Art. 5 schending
+//   2. TapeDeck beschikbaarheid — escaleer bij leeg deck (TGA4)
+//   3. executeTaoGate (trst.ts) — bevat TI-check (A11), Cerberus-axioma's
+//   4. Tape-beslissing — BLOCK stopt executie, rest laat door
+//   5. Actie uitvoeren + WORM-audit (A8: immutable trace, prevHash = cove-veld)
+
+export interface ConfigGateContext {
+  orgId: string | null;
+  connectorId: string | null;
+  endpoint: string;
+}
+
+export interface ConfigGateOutcome {
+  blocked: boolean;
+  decision: string;
+  reason: string | null;
+  httpStatus: number;
+  body: Record<string, unknown>;
+}
+
+export async function executeWithGate<T>(
+  actionDescription: string,
+  action: () => Promise<T>,
+  context: ConfigGateContext,
+): Promise<{ gateOutcome: ConfigGateOutcome; result?: T }> {
+  const start = Date.now();
+
+  // Stap 1 — EU Legal Gate (altijd eerste, terminaal — geen override mogelijk, A9)
+  const euResult = runEuLegalGate(actionDescription);
+  if (euResult.triggered) {
+    const processingMs = Date.now() - start;
+    appendWormEntry({
+      orgId: context.orgId,
+      connectorId: context.connectorId,
+      inputText: actionDescription,
+      decision: "BLOCK",
+      category: "EU_AI_ACT",
+      layer: "EU",
+      pressure: null,
+      processingMs,
+    });
+    return {
+      gateOutcome: {
+        blocked: true,
+        decision: "BLOCK",
+        reason: "EU AI Act Art. 5 — absolute weigering.",
+        httpStatus: 451,
+        body: {
+          status: "BLOCK",
+          category: "EU_AI_ACT",
+          layer: "EU",
+          endpoint: context.endpoint,
+          reason: "EU AI Act Art. 5 — absolute weigering.",
+        },
+      },
+    };
+  }
+
+  // Stap 2 — TapeDeck beschikbaarheid
+  const tapeDeck = getTapeDeck();
+  if (!tapeDeck || tapeDeck.tapes.size === 0) {
+    const processingMs = Date.now() - start;
+    // TGA4: geen tape beschikbaar — escaleer naar mens, blokkeer niet (operationele continuïteit)
+    appendWormEntry({
+      orgId: context.orgId,
+      connectorId: context.connectorId,
+      inputText: actionDescription,
+      decision: "ESCALATE_HUMAN",
+      category: "CONFIG_MUTATION",
+      layer: "CONFIG",
+      pressure: null,
+      processingMs,
+    });
+    const result = await action();
+    return {
+      gateOutcome: {
+        blocked: false,
+        decision: "ESCALATE_HUMAN",
+        reason: "Geen geverifieerde tapes geladen — actie uitgevoerd met escalatie (TGA4).",
+        httpStatus: 200,
+        body: {},
+      },
+      result,
+    };
+  }
+
+  // Stap 3 — Tape selectie (eerste beschikbare — configuratie-endpoints zijn niet scope-gebonden)
+  // Veilig: tapeDeck.tapes.size > 0 is gecontroleerd in stap 2
+  const tape = tapeDeck.tapes.values().next().value!;
+
+  // Stap 4 — TRST executie (bevat TI-check A11, SI-check, O36, Barbatos, Dymphna)
+  const trst = executeTaoGate(actionDescription, tape, tapeDeck);
+  const processingMs = Date.now() - start;
+
+  if (trst.hard_block) {
+    appendWormEntry({
+      orgId: context.orgId,
+      connectorId: context.connectorId,
+      inputText: actionDescription,
+      decision: "BLOCK",
+      category: "CONFIG_MUTATION",
+      layer: trst.result?.layer ?? "TRST",
+      pressure: null,
+      processingMs,
+    });
+    return {
+      gateOutcome: {
+        blocked: true,
+        decision: "BLOCK",
+        reason: trst.hard_block_reason ?? "TRST hard block.",
+        httpStatus: 403,
+        body: {
+          status: "BLOCK",
+          category: "TRST_VIOLATION",
+          layer: "TRST",
+          endpoint: context.endpoint,
+          reason: trst.hard_block_reason,
+        },
+      },
+    };
+  }
+
+  const tapeDecision = trst.result?.status ?? "ESCALATE_HUMAN";
+
+  if (tapeDecision === "BLOCK") {
+    appendWormEntry({
+      orgId: context.orgId,
+      connectorId: context.connectorId,
+      inputText: actionDescription,
+      decision: "BLOCK",
+      category: "CONFIG_MUTATION",
+      layer: trst.result?.layer ?? "TAPE",
+      pressure: trst.result?.pressure ?? null,
+      processingMs,
+    });
+    return {
+      gateOutcome: {
+        blocked: true,
+        decision: "BLOCK",
+        reason: trst.result?.reason ?? "Tape beslissing: BLOCK.",
+        httpStatus: 403,
+        body: {
+          status: "BLOCK",
+          category: "CONFIG_MUTATION",
+          layer: trst.result?.layer,
+          endpoint: context.endpoint,
+          reason: trst.result?.reason,
+        },
+      },
+    };
+  }
+
+  // Stap 5 — PASS of ESCALATE: actie uitvoeren + WORM-audit (A8, prevHash = cove-veld intern beheerd)
+  let result: T;
+  try {
+    result = await action();
+  } catch (err: unknown) {
+    // Actie mislukt — audit als BLOCK (Cerberus fail-safe: onverwachte fout = blokkeer)
+    appendWormEntry({
+      orgId: context.orgId,
+      connectorId: context.connectorId,
+      inputText: actionDescription,
+      decision: "BLOCK",
+      category: "ACTION_ERROR",
+      layer: "SYSTEM",
+      pressure: null,
+      processingMs: Date.now() - start,
+    });
+    throw err;
+  }
+
+  appendWormEntry({
+    orgId: context.orgId,
+    connectorId: context.connectorId,
+    inputText: actionDescription,
+    decision: tapeDecision,
+    category: "CONFIG_MUTATION",
+    layer: trst.result?.layer ?? "TAPE",
+    pressure: trst.result?.pressure ?? null,
+    processingMs,
+  });
+
+  return {
+    gateOutcome: {
+      blocked: false,
+      decision: tapeDecision,
+      reason: trst.result?.reason ?? null,
+      httpStatus: 200,
+      body: {},
+    },
+    result,
+  };
 }

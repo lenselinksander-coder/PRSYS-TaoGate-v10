@@ -20,6 +20,7 @@ import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegi
 import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace";
 import { testudoStatus } from "./middleware";
 import { appendWormEntry } from "./audit/wormChain";
+import { executeWithGate } from "./gateSystem";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -127,8 +128,13 @@ export async function registerRoutes(
   app.post("/api/observations", async (req, res) => {
     const parsed = insertObservationSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const observation = await storage.createObservation(parsed.data);
-    return res.status(201).json(observation);
+    const { gateOutcome, result } = await executeWithGate(
+      "Observatie aanmaken",
+      () => storage.createObservation(parsed.data),
+      { orgId: null, connectorId: null, endpoint: "POST /api/observations" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    return res.status(201).json(result);
   });
 
   app.get("/api/observations", async (req, res) => {
@@ -166,20 +172,36 @@ export async function registerRoutes(
   app.post("/api/scopes", async (req, res) => {
     const parsed = insertScopeSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    return res.status(201).json(await storage.createScope(parsed.data));
+    const { gateOutcome, result } = await executeWithGate(
+      `Scope aanmaken: ${parsed.data.name}`,
+      () => storage.createScope(parsed.data),
+      { orgId: parsed.data.orgId ?? null, connectorId: null, endpoint: "POST /api/scopes" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    return res.status(201).json(result);
   });
 
   app.put("/api/scopes/:id", async (req, res) => {
     const parsed = insertScopeSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const scope = await storage.updateScope(req.params.id, parsed.data);
-    if (!scope) return res.status(404).json({ error: "Scope not found" });
-    return res.json(scope);
+    const { gateOutcome, result } = await executeWithGate(
+      `Scope bijwerken: ${req.params.id}`,
+      () => storage.updateScope(req.params.id, parsed.data),
+      { orgId: parsed.data.orgId ?? null, connectorId: null, endpoint: "PUT /api/scopes/:id" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!result) return res.status(404).json({ error: "Scope not found" });
+    return res.json(result);
   });
 
   app.delete("/api/scopes/:id", async (req, res) => {
-    const deleted = await storage.deleteScope(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Scope not found" });
+    const { gateOutcome, result } = await executeWithGate(
+      `Scope verwijderen: ${req.params.id}`,
+      () => storage.deleteScope(req.params.id),
+      { orgId: null, connectorId: null, endpoint: "DELETE /api/scopes/:id" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!result) return res.status(404).json({ error: "Scope not found" });
     return res.json({ success: true });
   });
 
@@ -206,20 +228,36 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const existing = await storage.getOrganizationBySlug(parsed.data.slug);
     if (existing) return res.status(409).json({ error: "Organisatie met deze slug bestaat al" });
-    return res.status(201).json(await storage.createOrganization(parsed.data));
+    const { gateOutcome, result } = await executeWithGate(
+      `Organisatie aanmaken: ${parsed.data.name}`,
+      () => storage.createOrganization(parsed.data),
+      { orgId: null, connectorId: null, endpoint: "POST /api/organizations" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    return res.status(201).json(result);
   });
 
   app.put("/api/organizations/:id", async (req, res) => {
     const parsed = createOrgSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const org = await storage.updateOrganization(req.params.id, parsed.data);
-    if (!org) return res.status(404).json({ error: "Organization not found" });
-    return res.json(org);
+    const { gateOutcome, result } = await executeWithGate(
+      `Organisatie bijwerken: ${req.params.id}`,
+      () => storage.updateOrganization(req.params.id, parsed.data),
+      { orgId: req.params.id, connectorId: null, endpoint: "PUT /api/organizations/:id" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!result) return res.status(404).json({ error: "Organization not found" });
+    return res.json(result);
   });
 
   app.delete("/api/organizations/:id", async (req, res) => {
-    const deleted = await storage.deleteOrganization(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Organization not found" });
+    const { gateOutcome, result } = await executeWithGate(
+      `Organisatie verwijderen: ${req.params.id}`,
+      () => storage.deleteOrganization(req.params.id),
+      { orgId: req.params.id, connectorId: null, endpoint: "DELETE /api/organizations/:id" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!result) return res.status(404).json({ error: "Organization not found" });
     return res.json({ success: true });
   });
 
@@ -275,20 +313,36 @@ export async function registerRoutes(
   app.post("/api/connectors", async (req, res) => {
     const parsed = createConnectorSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    return res.status(201).json(await storage.createConnector(parsed.data));
+    const { gateOutcome, result } = await executeWithGate(
+      `Connector aanmaken: ${parsed.data.name}`,
+      () => storage.createConnector(parsed.data),
+      { orgId: parsed.data.orgId, connectorId: null, endpoint: "POST /api/connectors" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    return res.status(201).json(result);
   });
 
   app.put("/api/connectors/:id", async (req, res) => {
     const parsed = createConnectorSchema.partial().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const connector = await storage.updateConnector(req.params.id, parsed.data);
-    if (!connector) return res.status(404).json({ error: "Connector not found" });
-    return res.json(connector);
+    const { gateOutcome, result } = await executeWithGate(
+      `Connector bijwerken: ${req.params.id}`,
+      () => storage.updateConnector(req.params.id, parsed.data),
+      { orgId: parsed.data.orgId ?? null, connectorId: req.params.id, endpoint: "PUT /api/connectors/:id" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!result) return res.status(404).json({ error: "Connector not found" });
+    return res.json(result);
   });
 
   app.delete("/api/connectors/:id", async (req, res) => {
-    const deleted = await storage.deleteConnector(req.params.id);
-    if (!deleted) return res.status(404).json({ error: "Connector not found" });
+    const { gateOutcome, result } = await executeWithGate(
+      `Connector verwijderen: ${req.params.id}`,
+      () => storage.deleteConnector(req.params.id),
+      { orgId: null, connectorId: req.params.id, endpoint: "DELETE /api/connectors/:id" },
+    );
+    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!result) return res.status(404).json({ error: "Connector not found" });
     return res.json({ success: true });
   });
 
@@ -537,23 +591,28 @@ export async function registerRoutes(
         gateProfile: scopeMeta.gate_profile,
       } : undefined;
 
-      const scope = await storage.createScope({
-        name,
-        description: description || `Geïmporteerd dataset voor ${org.name}`,
-        status: "DRAFT",
-        orgId,
-        categories,
-        rules,
-        documents,
-        scopeMeta: scopeMetaMapped,
-        ingestMeta: {
-          query: `Import: ${name}`,
-          citations: [],
-          researchedAt: new Date().toISOString(),
-          model: "import-json",
-          gaps: [],
-        },
-      });
+      const { gateOutcome, result: scope } = await executeWithGate(
+        `JSON import aanmaken: ${name}`,
+        () => storage.createScope({
+          name,
+          description: description || `Geïmporteerd dataset voor ${org.name}`,
+          status: "DRAFT",
+          orgId,
+          categories,
+          rules,
+          documents,
+          scopeMeta: scopeMetaMapped,
+          ingestMeta: {
+            query: `Import: ${name}`,
+            citations: [],
+            researchedAt: new Date().toISOString(),
+            model: "import-json",
+            gaps: [],
+          },
+        }),
+        { orgId, connectorId: null, endpoint: "POST /api/import/json" },
+      );
+      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.status(201).json(scope);
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "Import mislukt" });
@@ -630,11 +689,16 @@ export async function registerRoutes(
         }
       }
 
-      const scope = await storage.createScope({
-        name, description: description || `CSV import voor ${org.name}`, status: "DRAFT", orgId,
-        categories, rules, documents: [],
-        ingestMeta: { query: `CSV Import: ${name}`, citations: [], researchedAt: new Date().toISOString(), model: "import-csv", gaps: [] },
-      });
+      const { gateOutcome, result: scope } = await executeWithGate(
+        `CSV import aanmaken: ${name}`,
+        () => storage.createScope({
+          name, description: description || `CSV import voor ${org.name}`, status: "DRAFT", orgId,
+          categories, rules, documents: [],
+          ingestMeta: { query: `CSV Import: ${name}`, citations: [], researchedAt: new Date().toISOString(), model: "import-csv", gaps: [] },
+        }),
+        { orgId, connectorId: null, endpoint: "POST /api/import/csv" },
+      );
+      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.status(201).json({ scope, imported: { categories: categories.length, rules: rules.length } });
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "CSV import mislukt" });
@@ -876,26 +940,33 @@ export async function registerRoutes(
         },
       ];
 
-      const created: string[] = [];
-      for (const def of scopeDefs) {
-        const existing = existingScopes.find(s => s.name === def.name);
-        if (existing) { created.push(`${def.name} (already exists)`); continue; }
-        const orgId = def.orgName ? createdOrgs[def.orgName] || null : null;
-        await storage.createScope({
-          name: def.name, description: def.description, orgId, categories: def.categories,
-          documents: def.documents, rules: def.rules, isDefault: def.isDefault,
-        });
-        created.push(`${def.name} (created, org: ${def.orgName || "none"})`);
-      }
-
-      const finalOrgs = await storage.getOrganizations();
-      const finalScopes = await storage.getScopes();
-      return res.json({
-        success: true,
-        organizations: finalOrgs.map(o => ({ name: o.name, gateProfile: o.gateProfile })),
-        scopes: created,
-        totals: { organizations: finalOrgs.length, scopes: finalScopes.length },
-      });
+      const { gateOutcome, result: demoResult } = await executeWithGate(
+        "Demo setup uitvoeren",
+        async () => {
+          const created: string[] = [];
+          for (const def of scopeDefs) {
+            const existing = existingScopes.find(s => s.name === def.name);
+            if (existing) { created.push(`${def.name} (already exists)`); continue; }
+            const orgId = def.orgName ? createdOrgs[def.orgName] || null : null;
+            await storage.createScope({
+              name: def.name, description: def.description, orgId, categories: def.categories,
+              documents: def.documents, rules: def.rules, isDefault: def.isDefault,
+            });
+            created.push(`${def.name} (created, org: ${def.orgName || "none"})`);
+          }
+          const finalOrgs = await storage.getOrganizations();
+          const finalScopes = await storage.getScopes();
+          return {
+            success: true,
+            organizations: finalOrgs.map(o => ({ name: o.name, gateProfile: o.gateProfile })),
+            scopes: created,
+            totals: { organizations: finalOrgs.length, scopes: finalScopes.length },
+          };
+        },
+        { orgId: null, connectorId: null, endpoint: "POST /api/seed-demo" },
+      );
+      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+      return res.json(demoResult);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -903,9 +974,14 @@ export async function registerRoutes(
 
   app.get("/api/algoritmeregister", async (_req, res) => {
     try {
-      const results = await syncAlgoritmeregister();
+      const { gateOutcome, result: syncResults } = await executeWithGate(
+        "Algoritmeregister synchronisatie uitvoeren",
+        () => syncAlgoritmeregister(),
+        { orgId: null, connectorId: null, endpoint: "GET /api/algoritmeregister" },
+      );
+      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.json(
-        results.map((r) => {
+        (syncResults ?? []).map((r) => {
           const dpiaLevel = classifyDpiaLevel(r.risk_score ?? 0);
           return {
             algorithm: r.algorithm_id,
