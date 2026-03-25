@@ -22,6 +22,7 @@ export interface IStorage {
   updateScope(id: string, scope: Partial<InsertScope>): Promise<Scope | undefined>;
   deleteScope(id: string): Promise<boolean>;
   getDefaultScope(): Promise<Scope | undefined>;
+  getTapeScopesByOrg(orgId: string): Promise<Scope[]>;
 
   createOrganization(org: InsertOrganization): Promise<Organization>;
   getOrganizations(): Promise<Organization[]>;
@@ -111,6 +112,12 @@ export class DatabaseStorage implements IStorage {
   async getDefaultScope(): Promise<Scope | undefined> {
     const [result] = await db.select().from(scopes).where(eq(scopes.isDefault!, "true"));
     return result;
+  }
+
+  async getTapeScopesByOrg(orgId: string): Promise<Scope[]> {
+    return db.select().from(scopes)
+      .where(and(eq(scopes.orgId!, orgId), eq(scopes.isTapeScope, true), eq(scopes.status, "LOCKED")))
+      .orderBy(scopes.tapeNumber);
   }
 
   async upsertScopeRules(scopeId: string, rules: ScopeRule[]): Promise<Scope | undefined> {
