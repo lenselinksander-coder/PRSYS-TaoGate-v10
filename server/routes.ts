@@ -133,7 +133,7 @@ export async function registerRoutes(
       () => storage.createObservation(parsed.data),
       { orgId: null, connectorId: null, endpoint: "POST /api/observations" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     return res.status(201).json(result);
   });
 
@@ -177,7 +177,7 @@ export async function registerRoutes(
       () => storage.createScope(parsed.data),
       { orgId: parsed.data.orgId ?? null, connectorId: null, endpoint: "POST /api/scopes" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     return res.status(201).json(result);
   });
 
@@ -189,7 +189,7 @@ export async function registerRoutes(
       () => storage.updateScope(req.params.id, parsed.data),
       { orgId: parsed.data.orgId ?? null, connectorId: null, endpoint: "PUT /api/scopes/:id" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     if (!result) return res.status(404).json({ error: "Scope not found" });
     return res.json(result);
   });
@@ -200,7 +200,7 @@ export async function registerRoutes(
       () => storage.deleteScope(req.params.id),
       { orgId: null, connectorId: null, endpoint: "DELETE /api/scopes/:id" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     if (!result) return res.status(404).json({ error: "Scope not found" });
     return res.json({ success: true });
   });
@@ -233,7 +233,7 @@ export async function registerRoutes(
       () => storage.createOrganization(parsed.data),
       { orgId: null, connectorId: null, endpoint: "POST /api/organizations" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     return res.status(201).json(result);
   });
 
@@ -245,7 +245,7 @@ export async function registerRoutes(
       () => storage.updateOrganization(req.params.id, parsed.data),
       { orgId: req.params.id, connectorId: null, endpoint: "PUT /api/organizations/:id" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     if (!result) return res.status(404).json({ error: "Organization not found" });
     return res.json(result);
   });
@@ -256,7 +256,7 @@ export async function registerRoutes(
       () => storage.deleteOrganization(req.params.id),
       { orgId: req.params.id, connectorId: null, endpoint: "DELETE /api/organizations/:id" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     if (!result) return res.status(404).json({ error: "Organization not found" });
     return res.json({ success: true });
   });
@@ -318,7 +318,7 @@ export async function registerRoutes(
       () => storage.createConnector(parsed.data),
       { orgId: parsed.data.orgId, connectorId: null, endpoint: "POST /api/connectors" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     return res.status(201).json(result);
   });
 
@@ -330,7 +330,7 @@ export async function registerRoutes(
       () => storage.updateConnector(req.params.id, parsed.data),
       { orgId: parsed.data.orgId ?? null, connectorId: req.params.id, endpoint: "PUT /api/connectors/:id" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     if (!result) return res.status(404).json({ error: "Connector not found" });
     return res.json(result);
   });
@@ -341,7 +341,7 @@ export async function registerRoutes(
       () => storage.deleteConnector(req.params.id),
       { orgId: null, connectorId: req.params.id, endpoint: "DELETE /api/connectors/:id" },
     );
-    if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
     if (!result) return res.status(404).json({ error: "Connector not found" });
     return res.json({ success: true });
   });
@@ -612,7 +612,7 @@ export async function registerRoutes(
         }),
         { orgId, connectorId: null, endpoint: "POST /api/import/json" },
       );
-      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+      if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.status(201).json(scope);
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "Import mislukt" });
@@ -698,7 +698,7 @@ export async function registerRoutes(
         }),
         { orgId, connectorId: null, endpoint: "POST /api/import/csv" },
       );
-      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+      if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.status(201).json({ scope, imported: { categories: categories.length, rules: rules.length } });
     } catch (err: any) {
       return res.status(500).json({ error: err.message || "CSV import mislukt" });
@@ -965,7 +965,7 @@ export async function registerRoutes(
         },
         { orgId: null, connectorId: null, endpoint: "POST /api/seed-demo" },
       );
-      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+      if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.json(demoResult);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
@@ -979,7 +979,7 @@ export async function registerRoutes(
         () => syncAlgoritmeregister(),
         { orgId: null, connectorId: null, endpoint: "GET /api/algoritmeregister" },
       );
-      if (gateOutcome.blocked) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+      if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
       return res.json(
         (syncResults ?? []).map((r) => {
           const dpiaLevel = classifyDpiaLevel(r.risk_score ?? 0);

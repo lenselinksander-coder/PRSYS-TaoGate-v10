@@ -78,6 +78,37 @@ export interface AppendWormParams {
   processingMs: number | null;
 }
 
+// ── auditLog — semantische wrapper voor governance-audit met cove veld ─────────
+// Gebruikt appendWormEntry() intern. Het `cove` veld identificeert de audit-context
+// (bv. "CONFIG_MUTATION", "EU_AI_ACT"). prevHash wordt intern beheerd door de
+// WORM-keten (A8 — Immutable Trace).
+
+export interface AuditLogParams {
+  decision: string;
+  orgId: string | null;
+  connectorId: string | null;
+  inputText: string;
+  endpoint: string;
+  actor?: string;
+  cove: string;
+  layer?: string | null;
+  pressure?: string | null;
+  processingMs?: number | null;
+}
+
+export function auditLog(params: AuditLogParams): void {
+  appendWormEntry({
+    orgId: params.orgId,
+    connectorId: params.connectorId,
+    inputText: params.inputText,
+    decision: params.decision,
+    category: params.cove,        // cove-veld → category in WORM-entry
+    layer: params.layer ?? null,
+    pressure: params.pressure ?? null,
+    processingMs: params.processingMs ?? null,
+  });
+}
+
 // ── Module-level chain state ──────────────────────────────────────────────────
 // Node.js is single-threaded, so these are safe without locks.
 

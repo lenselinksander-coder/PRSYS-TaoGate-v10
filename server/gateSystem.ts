@@ -1,7 +1,7 @@
 import { clinicalGate, type ClinicalGateResult } from "./clinicalGate";
 import type { GateProfile } from "@shared/schema";
 import { getTapeDeck, executeTaoGate, runEuLegalGate } from "./core";
-import { appendWormEntry } from "./audit/wormChain";
+import { appendWormEntry, auditLog } from "./audit/wormChain";
 
 // Feature 1: WASM sandbox — re-exported for use by the FSM and routes.
 // runGateWasm runs the gate logic inside a hermetic QuickJS WASM VM with
@@ -351,8 +351,16 @@ export function getGateProfileDescription(profile: GateProfile): string {
 //   1. EU Legal Gate (euLegalGate.ts) — terminaal bij Art. 5 schending
 //   2. TapeDeck beschikbaarheid — escaleer bij leeg deck (TGA4)
 //   3. executeTaoGate (trst.ts) — bevat TI-check (A11), Cerberus-axioma's
-//   4. Tape-beslissing — BLOCK stopt executie, rest laat door
-//   5. Actie uitvoeren + WORM-audit (A8: immutable trace, prevHash = cove-veld)
+//   4. Tape-beslissing — BLOCK/ESCALATE stoppen executie, PASS voert door
+//   5. Actie uitvoeren (alleen bij PASS/PASS_WITH_TRANSPARENCY) + auditLog (A8, cove)
+//
+// Beslissingsmatrix:
+//   EU Art. 5 trigger          → allowed=false, HTTP 451
+//   TRST hard_block            → allowed=false, HTTP 403
+//   Tape: BLOCK                → allowed=false, HTTP 403
+//   Tape: ESCALATE_*           → allowed=false, HTTP 202 (in behandeling, geen DB-write)
+//   Geen tapes (TGA4)          → allowed=false, HTTP 202
+//   Tape: PASS / PASS_WITH_TR  → allowed=true,  action() uitvoeren
 
 export interface ConfigGateContext {
   orgId: string | null;
@@ -361,7 +369,8 @@ export interface ConfigGateContext {
 }
 
 export interface ConfigGateOutcome {
-  blocked: boolean;
+  /** true = action() is uitgevoerd en result is beschikbaar; false = actie gestopt */
+  allowed: boolean;
   decision: string;
   reason: string | null;
   httpStatus: number;
@@ -378,20 +387,19 @@ export async function executeWithGate<T>(
   // Stap 1 — EU Legal Gate (altijd eerste, terminaal — geen override mogelijk, A9)
   const euResult = runEuLegalGate(actionDescription);
   if (euResult.triggered) {
-    const processingMs = Date.now() - start;
-    appendWormEntry({
+    auditLog({
+      decision: "BLOCK",
       orgId: context.orgId,
       connectorId: context.connectorId,
       inputText: actionDescription,
-      decision: "BLOCK",
-      category: "EU_AI_ACT",
+      endpoint: context.endpoint,
+      cove: "EU_AI_ACT",
       layer: "EU",
-      pressure: null,
-      processingMs,
+      processingMs: Date.now() - start,
     });
     return {
       gateOutcome: {
-        blocked: true,
+        allowed: false,
         decision: "BLOCK",
         reason: "EU AI Act Art. 5 — absolute weigering.",
         httpStatus: 451,
@@ -407,30 +415,32 @@ export async function executeWithGate<T>(
   }
 
   // Stap 2 — TapeDeck beschikbaarheid
+  // TGA4: geen tape beschikbaar → ESCALATE_HUMAN, HTTP 202, geen DB-write
   const tapeDeck = getTapeDeck();
   if (!tapeDeck || tapeDeck.tapes.size === 0) {
-    const processingMs = Date.now() - start;
-    // TGA4: geen tape beschikbaar — escaleer naar mens, blokkeer niet (operationele continuïteit)
-    appendWormEntry({
+    auditLog({
+      decision: "ESCALATE_HUMAN",
       orgId: context.orgId,
       connectorId: context.connectorId,
       inputText: actionDescription,
-      decision: "ESCALATE_HUMAN",
-      category: "CONFIG_MUTATION",
+      endpoint: context.endpoint,
+      cove: "CONFIG_MUTATION",
       layer: "CONFIG",
-      pressure: null,
-      processingMs,
+      processingMs: Date.now() - start,
     });
-    const result = await action();
     return {
       gateOutcome: {
-        blocked: false,
+        allowed: false,
         decision: "ESCALATE_HUMAN",
-        reason: "Geen geverifieerde tapes geladen — actie uitgevoerd met escalatie (TGA4).",
-        httpStatus: 200,
-        body: {},
+        reason: "Geen geverifieerde tapes geladen — menselijke review vereist (TGA4).",
+        httpStatus: 202,
+        body: {
+          status: "ESCALATE_HUMAN",
+          category: "CONFIG_MUTATION",
+          endpoint: context.endpoint,
+          reason: "Geen geverifieerde tapes geladen — menselijke review vereist (TGA4).",
+        },
       },
-      result,
     };
   }
 
@@ -443,19 +453,19 @@ export async function executeWithGate<T>(
   const processingMs = Date.now() - start;
 
   if (trst.hard_block) {
-    appendWormEntry({
+    auditLog({
+      decision: "BLOCK",
       orgId: context.orgId,
       connectorId: context.connectorId,
       inputText: actionDescription,
-      decision: "BLOCK",
-      category: "CONFIG_MUTATION",
+      endpoint: context.endpoint,
+      cove: "CONFIG_MUTATION",
       layer: trst.result?.layer ?? "TRST",
-      pressure: null,
       processingMs,
     });
     return {
       gateOutcome: {
-        blocked: true,
+        allowed: false,
         decision: "BLOCK",
         reason: trst.hard_block_reason ?? "TRST hard block.",
         httpStatus: 403,
@@ -472,20 +482,22 @@ export async function executeWithGate<T>(
 
   const tapeDecision = trst.result?.status ?? "ESCALATE_HUMAN";
 
+  // Stap 4b — BLOCK: definitief weigeren
   if (tapeDecision === "BLOCK") {
-    appendWormEntry({
+    auditLog({
+      decision: "BLOCK",
       orgId: context.orgId,
       connectorId: context.connectorId,
       inputText: actionDescription,
-      decision: "BLOCK",
-      category: "CONFIG_MUTATION",
+      endpoint: context.endpoint,
+      cove: "CONFIG_MUTATION",
       layer: trst.result?.layer ?? "TAPE",
       pressure: trst.result?.pressure ?? null,
       processingMs,
     });
     return {
       gateOutcome: {
-        blocked: true,
+        allowed: false,
         decision: "BLOCK",
         reason: trst.result?.reason ?? "Tape beslissing: BLOCK.",
         httpStatus: 403,
@@ -500,31 +512,62 @@ export async function executeWithGate<T>(
     };
   }
 
-  // Stap 5 — PASS of ESCALATE: actie uitvoeren + WORM-audit (A8, prevHash = cove-veld intern beheerd)
+  // Stap 4c — ESCALATE: in behandeling nemen, geen DB-write, HTTP 202
+  if (tapeDecision.startsWith("ESCALATE")) {
+    auditLog({
+      decision: tapeDecision,
+      orgId: context.orgId,
+      connectorId: context.connectorId,
+      inputText: actionDescription,
+      endpoint: context.endpoint,
+      cove: "CONFIG_MUTATION",
+      layer: trst.result?.layer ?? "TAPE",
+      pressure: trst.result?.pressure ?? null,
+      processingMs,
+    });
+    return {
+      gateOutcome: {
+        allowed: false,
+        decision: tapeDecision,
+        reason: trst.result?.reason ?? "Menselijke review vereist.",
+        httpStatus: 202,
+        body: {
+          status: tapeDecision,
+          category: "CONFIG_MUTATION",
+          layer: trst.result?.layer,
+          endpoint: context.endpoint,
+          reason: trst.result?.reason ?? "Menselijke review vereist.",
+        },
+      },
+    };
+  }
+
+  // Stap 5 — PASS of PASS_WITH_TRANSPARENCY: actie uitvoeren + auditLog (A8, cove)
   let result: T;
   try {
     result = await action();
   } catch (err: unknown) {
     // Actie mislukt — audit als BLOCK (Cerberus fail-safe: onverwachte fout = blokkeer)
-    appendWormEntry({
+    auditLog({
+      decision: "BLOCK",
       orgId: context.orgId,
       connectorId: context.connectorId,
       inputText: actionDescription,
-      decision: "BLOCK",
-      category: "ACTION_ERROR",
+      endpoint: context.endpoint,
+      cove: "ACTION_ERROR",
       layer: "SYSTEM",
-      pressure: null,
       processingMs: Date.now() - start,
     });
     throw err;
   }
 
-  appendWormEntry({
+  auditLog({
+    decision: tapeDecision,
     orgId: context.orgId,
     connectorId: context.connectorId,
     inputText: actionDescription,
-    decision: tapeDecision,
-    category: "CONFIG_MUTATION",
+    endpoint: context.endpoint,
+    cove: "CONFIG_MUTATION",
     layer: trst.result?.layer ?? "TAPE",
     pressure: trst.result?.pressure ?? null,
     processingMs,
@@ -532,7 +575,7 @@ export async function executeWithGate<T>(
 
   return {
     gateOutcome: {
-      blocked: false,
+      allowed: true,
       decision: tapeDecision,
       reason: trst.result?.reason ?? null,
       httpStatus: 200,
