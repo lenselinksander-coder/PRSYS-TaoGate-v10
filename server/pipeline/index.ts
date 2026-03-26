@@ -33,6 +33,8 @@ export type { PipelineInput, PipelineResult, PipelineStep, ScopeClassification, 
 export { classifyWithScope } from "./logos";
 export { resolveOlympiaRules, preflightCheck, runCerberus } from "./olympia";
 export { cerberusEnforce } from "./types";
+export { runMultiTapePipeline } from "./multiTape";
+export type { MultiTapePipelineResult, TapeEvalResult } from "./multiTape";
 
 // ── Vector Legitimacy Engine — hulpfuncties ───────────────────────────────────
 

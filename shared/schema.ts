@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, jsonb, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, jsonb, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -125,6 +125,10 @@ export const scopes = pgTable("scopes", {
   ingestMeta: jsonb("ingest_meta").$type<IngestMeta>(),
   scopeMeta: jsonb("scope_meta").$type<ScopeMeta>(),
   isDefault: text("is_default").default("false"),
+  /** Positie van deze scope in het multi-tape deck (0 = hoogste prioriteit, Tape 0 verplicht) */
+  tapeNumber: integer("tape_number"),
+  /** true = deze scope is actief als tape-scope in het multi-tape deck van de organisatie */
+  isTapeScope: boolean("is_tape_scope").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

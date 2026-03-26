@@ -15,6 +15,7 @@ import {
   gatewayClassify,
   resolveOlympiaRules,
   preflightCheck,
+  runMultiTapePipeline,
 } from "./pipeline";
 import { syncAlgoritmeregister } from "./integrations/algoritmeregister/syncRegister";
 import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace";
@@ -417,6 +418,22 @@ export async function registerRoutes(
       const hash = crypto.createHash("sha256").update(raw).digest("hex");
       const results = await storage.getIntentsBySubjectRef(hash);
       return res.json({ besluiten: results });
+    } catch (err: any) {
+      return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
+    }
+  });
+
+  // ── Multi-tape pipeline evaluatie ──────────────────────
+  app.post("/api/multi-tape/evaluate", async (req, res) => {
+    try {
+      const schema = z.object({
+        orgId: z.string().min(1),
+        intent: z.string().min(1),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const result = await runMultiTapePipeline(parsed.data.orgId, parsed.data.intent);
+      return res.json(result);
     } catch (err: any) {
       return res.status(500).json({ error: "internal_error", message: err?.message ?? String(err) });
     }
