@@ -82,8 +82,24 @@ export default function OrganizationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Aanmaken mislukt");
+      // r.json() kan gooien als de server geen geldige JSON stuurt (bijv. HTML foutpagina in WebKit)
+      let data: Record<string, unknown>;
+      try {
+        data = await r.json();
+      } catch {
+        throw new Error("Server stuurde een ongeldige respons — controleer de verbinding");
+      }
+      if (!r.ok) {
+        // data.error is altijd een string via de server (of data.message voor Express-fouten)
+        const msg = typeof data.error === "string"
+          ? data.error
+          : (data.message as string | undefined) ?? "Aanmaken mislukt";
+        throw new Error(msg);
+      }
+      // Gate kan HTTP 202 sturen (ESCALATE/TGA4): r.ok maar geen DB-write
+      if (data.status && data.status !== "PASS" && data.status !== "PASS_WITH_TRANSPARENCY") {
+        throw new Error((data.reason as string | undefined) ?? "Aanmaken vereist aanvullende goedkeuring (gate)");
+      }
       setShowForm(false);
       setForm({ name: "", slug: "", description: "", sector: "other", gateProfile: "GENERAL" });
       loadOrgs();
