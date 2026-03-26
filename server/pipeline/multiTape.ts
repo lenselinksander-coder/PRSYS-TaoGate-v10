@@ -17,7 +17,7 @@ import { getTapeDeck, executeTaoGate, runEuLegalGate } from "../core";
 import { auditLog } from "../audit";
 import { latticeMax } from "./types";
 import type { Scope } from "@shared/schema";
-import type { TRSTDecision } from "../core";
+import type { TRSTDecision, TapeDeck, TapeModule } from "../core";
 
 // ── Typen ────────────────────────────────────────────────────────────────────
 
@@ -65,13 +65,15 @@ async function evalTapeScope(
   orgId: string,
 ): Promise<TapeEvalResult> {
   const start = Date.now();
-  const tapeDeck = getTapeDeck();
+  const tapeDeckOrNull = getTapeDeck();
 
   // Zoek de bijbehorende TapeModule op basis van scopeId of tapeNumber.
   // Fallback: eerste beschikbare tape als geen directe match gevonden.
-  const tapeEntries = Array.from(tapeDeck.tapes.entries());
+  const tapeEntries: [string, TapeModule][] = tapeDeckOrNull
+    ? Array.from((tapeDeckOrNull as TapeDeck).tapes.entries())
+    : [];
   const matchedEntry = tapeEntries.find(([id]) => id === scope.id)
-    ?? tapeEntries.find(([, tape]) => tape.meta.tape_id === String(scope.tapeNumber))
+    ?? tapeEntries.find(([, t]) => t.meta.tape_id === String(scope.tapeNumber))
     ?? tapeEntries[0];
 
   const tape = matchedEntry?.[1];
@@ -102,7 +104,7 @@ async function evalTapeScope(
     };
   }
 
-  const trst = executeTaoGate(intent, tape, tapeDeck);
+  const trst = executeTaoGate(intent, tape, tapeDeckOrNull as TapeDeck);
   const decision = decideTRST(trst);
   const reason = reasonTRST(trst);
   const processingMs = Date.now() - start;
@@ -152,7 +154,7 @@ export async function runMultiTapePipeline(
 
   // ── Stap 1: EU Legal Gate (altijd eerst, terminaal) ──────────────────────
   const euResult = runEuLegalGate(intent);
-  if (euResult.blocked) {
+  if (euResult.triggered) {
     const processingMs = Date.now() - start;
     const euGround = euResult.ground ?? null;
 

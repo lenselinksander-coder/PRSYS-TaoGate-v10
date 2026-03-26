@@ -492,7 +492,7 @@ export async function executeWithGate<T>(
       endpoint: context.endpoint,
       cove: "CONFIG_MUTATION",
       layer: trst.result?.layer ?? "TAPE",
-      pressure: trst.result?.pressure ?? null,
+      pressure: null,
       processingMs,
     });
     return {
@@ -522,7 +522,7 @@ export async function executeWithGate<T>(
       endpoint: context.endpoint,
       cove: "CONFIG_MUTATION",
       layer: trst.result?.layer ?? "TAPE",
-      pressure: trst.result?.pressure ?? null,
+      pressure: null,
       processingMs,
     });
     return {
@@ -569,7 +569,7 @@ export async function executeWithGate<T>(
     endpoint: context.endpoint,
     cove: "CONFIG_MUTATION",
     layer: trst.result?.layer ?? "TAPE",
-    pressure: trst.result?.pressure ?? null,
+    pressure: null,
     processingMs,
   });
 

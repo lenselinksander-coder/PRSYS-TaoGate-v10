@@ -226,7 +226,15 @@ export async function registerRoutes(
 
   app.post("/api/organizations", async (req, res) => {
     const parsed = createOrgSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    if (!parsed.success) {
+      const flat = parsed.error.flatten();
+      const fieldMsg = Object.entries(flat.fieldErrors)
+        .map(([veld, msgs]) => `${veld}: ${(msgs ?? []).join(", ")}`)
+        .join("; ");
+      const errMsg = fieldMsg || flat.formErrors.join("; ") || "Ongeldige invoer";
+      console.warn("[POST /api/organizations] Validatiefout:", errMsg, JSON.stringify(flat));
+      return res.status(400).json({ error: errMsg });
+    }
     const existing = await storage.getOrganizationBySlug(parsed.data.slug);
     if (existing) return res.status(409).json({ error: "Organisatie met deze slug bestaat al" });
     const { gateOutcome, result } = await executeWithGate(
@@ -234,7 +242,7 @@ export async function registerRoutes(
       () => storage.createOrganization(parsed.data),
       { orgId: null, connectorId: null, endpoint: "POST /api/organizations" },
     );
-    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json(gateOutcome.body);
+    if (!gateOutcome.allowed) return res.status(gateOutcome.httpStatus).json({ ...gateOutcome.body, error: gateOutcome.reason ?? gateOutcome.decision });
     return res.status(201).json(result);
   });
 
