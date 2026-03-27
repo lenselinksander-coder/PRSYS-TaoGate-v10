@@ -34,7 +34,7 @@ const rateBuckets = new Map<string, RateBucket>();
 
 function cleanupBuckets(): void {
   const now = Date.now();
-  for (const [key, bucket] of rateBuckets) {
+  for (const [key, bucket] of Array.from(rateBuckets.entries())) {
     if (now > bucket.resetAt) {
       rateBuckets.delete(key);
     }
