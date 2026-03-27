@@ -111,7 +111,7 @@ export default function DeckBuilderPage() {
     if (!hasTape0) return "Tape 0 is verplicht als EU-fundament. Wijs tapeNumber=0 toe aan een scope.";
     const nums = active.map(a => a.tapeNumber).filter(n => n !== null) as number[];
     const dupes = nums.filter((n, i) => nums.indexOf(n) !== i);
-    if (dupes.length > 0) return `Dubbele tapeNummers: ${[...new Set(dupes)].join(", ")}. Elk tapeNumber moet uniek zijn.`;
+    if (dupes.length > 0) return `Dubbele tapeNummers: ${Array.from(new Set(dupes)).join(", ")}. Elk tapeNumber moet uniek zijn.`;
     return null;
   }
 

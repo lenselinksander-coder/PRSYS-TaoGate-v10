@@ -184,7 +184,7 @@ export async function runTrace(opts: TraceInput): Promise<TraceResult> {
   // ── Step 5: Hypatia (Risk) ────────────────────────────────────────────────
   let hypatia: HypatiaResult;
   if (cerberusBlocked) {
-    hypatia = { impact: 1.0, probability: 1.0, risk: 1.0, decision: "BLOCK" as const, thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief." };
+    hypatia = { impact: 1.0, probability: 1.0, risk: 1.0, decision: "BLOCK" as const, thresholdLabel: "CANON_OVERRIDE", reason: "Overgeslagen — Cerberus BLOCK actief.", dpiaLevel: 5 as const, dpiaLabel: "Kritisch risico — DPIA verplicht + DPO-overleg" };
     steps.push({
       name: "Hypatia",
       symbol: "⚖",

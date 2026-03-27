@@ -7,6 +7,7 @@
 // PICU_MAXIMA demo-knop: stuurt een gefabriceerde klinische intentie.
 
 import { useState } from "react";
+import type { JSX } from "react";
 import { Zap, Building2, Shield, CheckCircle, AlertTriangle, XCircle, Clock, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
