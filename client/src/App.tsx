@@ -17,6 +17,7 @@ import AlgoritmeregisterPage from "./pages/AlgoritmeregisterPage";
 import GlazenBastionPage from "./pages/GlazenBastionPage";
 import DeckBuilderPage from "./pages/DeckBuilderPage";
 import LiveGateViewPage from "./pages/LiveGateViewPage";
+import SystemCheckPage from "./pages/SystemCheckPage";
 
 function AdminRoutes() {
   return (
@@ -36,6 +37,7 @@ function AdminRoutes() {
         <Route path="ingest" element={<IngestPage />} />
         <Route path="deck-builder" element={<DeckBuilderPage />} />
         <Route path="live-gate" element={<LiveGateViewPage />} />
+        <Route path="system-check" element={<SystemCheckPage />} />
       </Routes>
     </AdminLayout>
   );

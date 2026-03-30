@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Eye, ShieldAlert, Menu, X, Building2, Plug, FileInput, ScrollText, LayoutDashboard, Monitor, Activity, Zap, Layers, Map, Keyboard, Triangle, BookOpen } from "lucide-react";
+import { Eye, ShieldAlert, Menu, X, Building2, Plug, FileInput, ScrollText, LayoutDashboard, Monitor, Activity, Zap, Layers, Map, Keyboard, Triangle, BookOpen, HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useGlobalShortcuts, CommandPalette, ShortcutHelp, GoModeIndicator } from "@/components/CommandPalette";
@@ -38,6 +38,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
     items: [
       { name: "Castra", path: "/admin/castra", icon: Map },
       { name: "OLYMPIA", path: "/admin/olympia", icon: Activity },
+      { name: "Systeem Check", path: "/admin/system-check", icon: HeartPulse },
     ],
   },
   {
