@@ -548,9 +548,26 @@ def _print_report(report: SystemCheckReport) -> None:
     print("=" * width)
 
 
+def _report_to_dict(report: SystemCheckReport) -> dict:
+    """Return *report* as a JSON-serialisable dictionary."""
+    return {
+        "overall": report.overall,
+        "timestamp": report.timestamp,
+        "checks": [
+            {"name": c.name, "status": c.status, "detail": c.detail}
+            for c in report.checks
+        ],
+    }
+
+
 if __name__ == "__main__":
+    import json
     import sys
 
+    use_json = "--json" in sys.argv
     report = run_system_check()
-    _print_report(report)
+    if use_json:
+        print(json.dumps(_report_to_dict(report)))
+    else:
+        _print_report(report)
     sys.exit(0 if report.overall == "OK" else 1)

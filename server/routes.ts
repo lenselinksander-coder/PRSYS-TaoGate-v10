@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 
 import { z } from "zod";
 import crypto from "crypto";
+import { execFile } from "child_process";
 import { storage } from "./storage";
 import { insertObservationSchema, insertScopeSchema, insertOrganizationSchema, gateProfiles } from "@shared/schema";
 import type { ScopeMeta } from "@shared/schema";
@@ -22,6 +23,13 @@ import { classifyDpiaLevel, DPIA_LEVEL_LABELS } from "./trace";
 import { testudoStatus } from "./middleware";
 import { appendWormEntry } from "./audit/wormChain";
 import { executeWithGate } from "./gateSystem";
+
+// Rate-limit bucket voor het /api/system/check endpoint (subprocess-bescherming).
+const _systemCheckRateMap = new Map<string, { count: number; resetAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of _systemCheckRateMap) { if (now > v.resetAt) _systemCheckRateMap.delete(k); }
+}, 120_000);
 
 export async function registerRoutes(
   httpServer: Server,
@@ -863,6 +871,47 @@ export async function registerRoutes(
       sectors: ["healthcare", "finance", "education", "government", "technology", "legal", "energy", "transport", "retail", "manufacturing", "other"],
       testudo: testudoStatus(),
     });
+  });
+
+  app.get("/api/system/check", (_req, res) => {
+    const pythonExe = process.env.PYTHON_EXECUTABLE ?? "python3";
+    // Expliciet rate-limit voor dit endpoint: max 5 verzoeken per minuut per client.
+    // (Aanvullend op de globale Testudo API-limiet – beschermt tegen subprocess-flooding.)
+    const clientId = (_req.ip ?? "unknown").replace(/[^a-z0-9.:_-]/gi, "");
+    const now = Date.now();
+    if (!_systemCheckRateMap.has(clientId)) {
+      _systemCheckRateMap.set(clientId, { count: 0, resetAt: now + 60_000 });
+    }
+    const bucket = _systemCheckRateMap.get(clientId)!;
+    if (now > bucket.resetAt) { bucket.count = 0; bucket.resetAt = now + 60_000; }
+    bucket.count++;
+    if (bucket.count > 5) {
+      res.setHeader("Retry-After", Math.ceil((bucket.resetAt - now) / 1000));
+      return res.status(429).json({ error: "rate_limited", detail: "Max 5 system checks per minuut." });
+    }
+
+    execFile(
+      pythonExe,
+      ["-m", "tao_gate.system_check", "--json"],
+      { cwd: process.cwd(), timeout: 30_000 },
+      (err, stdout, stderr) => {
+        if (err) {
+          console.error("[system/check] Python check failed:", stderr || err.message);
+          return res.status(500).json({ error: "system_check_failed", detail: stderr || err.message });
+        }
+        try {
+          const report = JSON.parse(stdout) as {
+            overall: "OK" | "FAIL";
+            timestamp: string;
+            checks: { name: string; status: "OK" | "FAIL"; detail: string }[];
+          };
+          return res.json(report);
+        } catch (parseErr) {
+          console.error("[system/check] JSON parse error:", parseErr);
+          return res.status(500).json({ error: "parse_failed", detail: String(parseErr) });
+        }
+      }
+    );
   });
 
   app.post("/api/seed-demo", async (_req, res) => {
