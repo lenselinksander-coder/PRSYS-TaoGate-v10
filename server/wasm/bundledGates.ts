@@ -320,16 +320,16 @@ function clinicalGate(input) {
 // ── Canon checks (must mirror gateSystem.ts) ─────────────────────────────────
 
 var POLITICAL_MANIPULATION_PATTERNS = [
-  /stem.*(advies|gedrag|voorkeur|bei.nvloed)/,
-  /verkiezing.*(campagne|fraude|ondermijn|bei.nvloed)/,
+  /stem.*(advies|gedrag|voorkeur|beïnvloed)/,
+  /verkiezing.*(campagne|fraude|ondermijn|beïnvloed)/,
   /kiezers?.*(segmentat|targeting|manipul|profiler)/,
   /politiek.*(overtuiging|invloed|manipul|sturen)/,
   /\\b(polariseren|polarisatie|desinformatie|nepnieuws|fake\\s*news)\\b/,
   /\\blaat\\b.*\\bstemmen\\s+op\\b/,
   /manipul\\w*.*\\b(kiezers|stemm|verkiezing|publieke\\s+opinie)\\b/,
   /\\b(kiezers|stemm|verkiezing|publieke\\s+opinie)\\b.*manipul/,
-  /bei.nvloed.*\\b(stemgedrag|verkiezing|electoraat|kiezers)\\b/,
-  /\\b(stemgedrag|verkiezing|electoraat|kiezers)\\b.*bei.nvloed/,
+  /beïnvloed.*\\b(stemgedrag|verkiezing|electoraat|kiezers)\\b/,
+  /\\b(stemgedrag|verkiezing|electoraat|kiezers)\\b.*beïnvloed/,
   /twijfel.*(zaaien|verkiezingsuitslag)/,
   /target.*(advertentie|campagne).*(politiek|kiezers|zwakke)/,
   /\\bai\\b.*(kiezers|verkiezing).*manipul/,
