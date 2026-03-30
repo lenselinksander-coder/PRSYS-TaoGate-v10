@@ -11,6 +11,7 @@ import { runValkyrie } from "./valkyrie";
 import { runTaoGate } from "./taogate";
 import { runCoVe } from "./cove";
 import { runAudit } from "./audit";
+import { auditLog } from "../audit";
 import { evaluateImplicitPressure, routeImplicitPressure, taoGateSchema } from "./clinical";
 import { orchestrateGate } from "../fsm";
 import { cerberusEnforce, normaliseDecision, latticeMax } from "./types";
@@ -313,6 +314,34 @@ export async function gatewayClassify(opts: {
   if (!org) throw new Error("Organisatie niet gevonden");
 
   const gateProfile = (org.gateProfile as GateProfile) || "GENERAL";
+
+  // ── I9: Connector + Scope pre-validatie (vóór dure operaties) ────────────────
+  // Connector en scope worden hier vroeg gevalideerd zodat orchestrateGate (WASM)
+  // en evaluateImplicitPressure (externe LLM) nooit worden aangeroepen voor een
+  // ongeldige of ingetrokken connector of een ontbrekende scope (TGA4).
+  const connector = await storage.getConnector(connectorId);
+  if (!connector || connector.status === "REVOKED") {
+    auditLog({ decision: "BLOCK", orgId, connectorId, inputText: text, endpoint: "gateway/classify", cove: "I9_CONNECTOR_REVOKED" });
+    return { decision: "BLOCK", rule_id: null, gate: null, scope: null, olympia: null, processingMs: Date.now() - start, organization: org.name, gateProfile, lexiconSource: "internal", lexiconDeterministic: "true", reason: "Connector is ingetrokken (REVOKED) — verzoek geweigerd." };
+  }
+  if (connector.status === "INACTIVE") {
+    auditLog({ decision: "ESCALATE_HUMAN", orgId, connectorId, inputText: text, endpoint: "gateway/classify", cove: "I9_CONNECTOR_INACTIVE" });
+    return { decision: "ESCALATE_HUMAN", rule_id: null, gate: null, scope: null, olympia: null, processingMs: Date.now() - start, organization: org.name, gateProfile, lexiconSource: "internal", lexiconDeterministic: "true", reason: "Connector is inactief — menselijke review vereist." };
+  }
+
+  let resolvedScopeForI9: Scope | undefined;
+  if (scopeId) {
+    resolvedScopeForI9 = await storage.getScope(scopeId);
+  } else {
+    const orgScopes = await storage.getScopesByOrg(orgId);
+    resolvedScopeForI9 = orgScopes.find(s => s.status === "LOCKED") ?? orgScopes[0];
+  }
+  if (!resolvedScopeForI9) {
+    auditLog({ decision: "ESCALATE_HUMAN", orgId, connectorId, inputText: text, endpoint: "gateway/classify", cove: "I9_NO_SCOPE_TGA4" });
+    return { decision: "ESCALATE_HUMAN", rule_id: null, gate: null, scope: null, olympia: null, processingMs: Date.now() - start, organization: org.name, gateProfile, lexiconSource: "internal", lexiconDeterministic: "true", reason: "Geen scope beschikbaar (TGA4) — menselijke review vereist." };
+  }
+  // ── Einde I9 ─────────────────────────────────────────────────────────────────
+
   const gate = await orchestrateGate(text, gateProfile);
 
   let implicitPressureOverride: ReturnType<typeof routeImplicitPressure> = null;
@@ -341,22 +370,13 @@ export async function gatewayClassify(opts: {
   let resolvedScope: Scope | undefined;
 
   if (!implicitPressureOverride && (gate.status === "PASS" || gate.status === "PASS_WITH_TRANSPARENCY")) {
-    let scope: Scope | undefined;
-    if (scopeId) {
-      scope = await storage.getScope(scopeId);
-    } else {
-      const orgScopes = await storage.getScopesByOrg(orgId);
-      scope = orgScopes.find(s => s.status === "LOCKED") || orgScopes[0];
-    }
-
-    if (scope) {
-      resolvedScope = scope;
-      scopeResult = classifyWithScope(text, scope);
-      const rules = (scope.rules || []) as ScopeRule[];
-      const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
-      const matchedDomain = availableDomains.find(d => scopeResult!.category.toUpperCase().includes(d.toUpperCase()));
-      olympiaResult = resolveOlympiaRules(scope, matchedDomain);
-    }
+    // resolvedScopeForI9 is al opgehaald in de I9-check hierboven — geen nieuwe DB-call nodig.
+    resolvedScope = resolvedScopeForI9;
+    scopeResult = classifyWithScope(text, resolvedScope);
+    const rules = (resolvedScope.rules || []) as ScopeRule[];
+    const availableDomains = Array.from(new Set(rules.map(r => r.domain)));
+    const matchedDomain = availableDomains.find(d => scopeResult!.category.toUpperCase().includes(d.toUpperCase()));
+    olympiaResult = resolveOlympiaRules(resolvedScope, matchedDomain);
   }
 
   const cerberusDecision = cerberusEnforce(gate.status, scopeResult?.status as GateDecision | undefined);
