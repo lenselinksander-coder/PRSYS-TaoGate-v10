@@ -27,14 +27,16 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ── Lege invoer (Argos early return) ─────────────────────────────────────────
 
 describe("runPipeline — lege invoer (Argos early return)", () => {
-  it("lege string → finalDecision = PASS", async () => {
+  // TRST A4 (Canon Completeness): lege invoer mag nooit stil worden doorgelaten.
+  // Verwacht gedrag: ESCALATE_HUMAN zodat een mens de context beoordeelt.
+  it("lege string → finalDecision = ESCALATE_HUMAN (TRST A4)", async () => {
     const resultaat = await runPipeline({ input: "" });
-    expect(resultaat.finalDecision).toBe("PASS");
+    expect(resultaat.finalDecision).toBe("ESCALATE_HUMAN");
   });
 
-  it("alleen spaties → finalDecision = PASS (Argos normaliseert)", async () => {
+  it("alleen spaties → finalDecision = ESCALATE_HUMAN (TRST A4)", async () => {
     const resultaat = await runPipeline({ input: "   " });
-    expect(resultaat.finalDecision).toBe("PASS");
+    expect(resultaat.finalDecision).toBe("ESCALATE_HUMAN");
   });
 
   it("lege invoer → vector = null (geen Vector Engine-berekening)", async () => {

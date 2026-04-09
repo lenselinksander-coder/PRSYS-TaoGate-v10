@@ -89,18 +89,20 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
   steps.push(argosStep);
 
   if (argosStep.decision === "EMPTY") {
+    // TRST A4 (Canon Completeness): lege invoer is geen geldige observatie — nooit stil doorgaan.
+    // Lege invoer → ESCALATE_HUMAN zodat een mens de context kan beoordelen.
     const hypatia = hypatiaRisk(impact, probability);
     const phronesis = phronesisCapacity(tau, omega, hypatia.risk);
     return {
       auditId,
       input,
       steps,
-      lattice: { D_gate: "PASS", D_scope: "PASS", D_runtime: "PASS", D_final: "PASS" },
+      lattice: { D_gate: "ESCALATE_HUMAN", D_scope: "ESCALATE_HUMAN", D_runtime: "ESCALATE_HUMAN", D_final: "ESCALATE_HUMAN" },
       hypatia,
       phronesis,
       vector: null,
-      finalDecision: "PASS",
-      finalReason: "Lege invoer — doorgelaten zonder verdere verwerking.",
+      finalDecision: "ESCALATE_HUMAN",
+      finalReason: "Lege invoer gedetecteerd — TRST A4: geen stille doorlating mogelijk. Menselijke review vereist.",
       dpiaLevel: hypatia.dpiaLevel,
       dpiaLabel: hypatia.dpiaLabel,
       processingMs: Date.now() - totalStart,
@@ -134,8 +136,9 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
   let vectorEval: VectorEvaluation | null = null;
   try {
     vectorEval = evaluateVector({ mandate: vectorMandate, integrity: vectorIntegrity, load: vectorLoad });
-  } catch {
+  } catch (err) {
     // Berekeningsfout → conservatief HOLD; pipeline gaat door
+    console.error("[vector] evaluateVector uitzondering (Cerberus-fallback → HOLD):", err);
     vectorEval = null;
   }
 
@@ -198,6 +201,7 @@ export async function runPipeline(opts: PipelineInput): Promise<PipelineResult> 
 }
 
 export async function classifyIntent(text: string, scopeId: string): Promise<any> {
+  try {
   const scope = await storage.getScope(scopeId);
   if (!scope) return { error: "Scope not found" };
 
@@ -297,6 +301,23 @@ export async function classifyIntent(text: string, scopeId: string): Promise<any
     lexiconDeterministic: "true",
     onderbouwing: onderbouwing || null,
   };
+  } catch (err) {
+    console.error("[classifyIntent] Onverwachte uitzondering (fail-safe → ESCALATE_HUMAN):", err);
+    return {
+      status: "ESCALATE_HUMAN",
+      rule_id: null,
+      olympia: "CLASSIFY_INTENT_ERROR",
+      layer: "SYSTEM",
+      pressure: "UNKNOWN",
+      escalation: "SYSTEM_ADMIN",
+      reason: "Interne fout bij classificatie — fail-safe escalatie naar beheerder.",
+      winningRule: null,
+      signals: null,
+      lexiconSource: "internal",
+      lexiconDeterministic: "false",
+      onderbouwing: null,
+    };
+  }
 }
 
 export async function gatewayClassify(opts: {
@@ -311,7 +332,10 @@ export async function gatewayClassify(opts: {
   const { text, orgId, connectorId, scopeId, subjectRef, subjectRefType } = opts;
 
   const org = await storage.getOrganization(orgId);
-  if (!org) throw new Error("Organisatie niet gevonden");
+  if (!org) {
+    auditLog({ decision: "ESCALATE_HUMAN", orgId, connectorId, inputText: text, endpoint: "gateway/classify", cove: "I9_ORG_NOT_FOUND" });
+    return { decision: "ESCALATE_HUMAN", rule_id: null, gate: null, scope: null, olympia: null, processingMs: Date.now() - start, organization: null, gateProfile: "GENERAL", lexiconSource: "internal", lexiconDeterministic: "true", reason: "Organisatie niet gevonden — menselijke review vereist." };
+  }
 
   const gateProfile = (org.gateProfile as GateProfile) || "GENERAL";
 
